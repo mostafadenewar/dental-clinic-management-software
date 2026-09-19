@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useDeferredValue, useState } from 'react'
 import './App.css'
 import SideBar from './left_sidebar/sideBar.tsx'
 import Header from './header/header.tsx'
@@ -19,6 +19,7 @@ export type PageKey =
 
 function App() {
   const [page, setPage] = useState<PageKey>('dashboard')
+  const contentPage = useDeferredValue(page)
 
   return (
     <div className="app-layout">
@@ -26,12 +27,12 @@ function App() {
       <div className="app-main">
         <Header page={page} />
         <main className="app-content">
-          {page === 'dashboard' && <Dashboard />}
-          {page === 'patients' && <Patients />}
-          {page === 'appointments' && <Appointments />}
-          {page === 'treatment' && <TreatmentPlans />}
-          {page === 'billing' && <Billing />}
-          {page === 'inventory' && <Inventory />}
+          {contentPage === 'dashboard' && <Dashboard />}
+          {contentPage === 'patients' && <Patients />}
+          {contentPage === 'appointments' && <Appointments />}
+          {contentPage === 'treatment' && <TreatmentPlans />}
+          {contentPage === 'billing' && <Billing />}
+          {contentPage === 'inventory' && <Inventory />}
         </main>
       </div>
     </div>
