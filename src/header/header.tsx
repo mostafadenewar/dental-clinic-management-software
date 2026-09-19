@@ -30,14 +30,21 @@ const SEARCH_PLACEHOLDER: Partial<Record<PageKey, string>> = {
 
 interface HeaderProps {
   page: PageKey
+  searchValue?: string
+  onSearchChange?: (value: string) => void
+  primaryAction?: { label: string; onClick: () => void }
 }
 
-const Header = ({ page }: HeaderProps) => {
+const Header = ({ page, searchValue, onSearchChange, primaryAction }: HeaderProps) => {
   const [searchQuery, setSearchQuery] = useState('')
   const meta = PAGE_META[page]
 
+  const isControlled = onSearchChange !== undefined
+  const value = isControlled ? searchValue ?? '' : searchQuery
+
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchQuery(e.target.value)
+    if (isControlled) onSearchChange(e.target.value)
+    else setSearchQuery(e.target.value)
   }
 
   return (
@@ -63,7 +70,7 @@ const Header = ({ page }: HeaderProps) => {
             <input
               type="text"
               placeholder={SEARCH_PLACEHOLDER[page]}
-              value={searchQuery}
+              value={value}
               onChange={handleSearchChange}
             />
           </div>
@@ -100,6 +107,13 @@ const Header = ({ page }: HeaderProps) => {
           <button type="button" className="header-bell">
             <Bell size={17} />
             <span className="header-bell-dot" />
+          </button>
+        )}
+
+        {primaryAction && (
+          <button type="button" className="header-primary-btn" onClick={primaryAction.onClick}>
+            <Plus size={14} weight="bold" />
+            {primaryAction.label}
           </button>
         )}
 

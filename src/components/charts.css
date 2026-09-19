@@ -1,0 +1,36 @@
+.chart-donut {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.chart-donut-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  pointer-events: none;
+}
+
+.chart-donut-center strong {
+  font-size: 17px;
+  font-weight: 700;
+  color: #1e293b;
+  letter-spacing: -0.01em;
+}
+
+.chart-donut-center span {
+  font-size: 8.5px;
+  color: #94a3b8;
+}
+
+.chart-trend svg {
+  display: block;
+}
+
+.chart-axis-label {
+  font-size: 8px;
+  fill: #94a3b8;
+}
