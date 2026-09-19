@@ -118,6 +118,29 @@ export interface AppointmentRecord {
   notes: string
 }
 
+export interface PatientHistory {
+  appointments: Array<{
+    id: string
+    date: string
+    startTime: string
+    endTime: string
+    title: string
+    room: string
+    status: string
+    notes: string
+    provider: string
+  }>
+  invoices: Array<{
+    id: string
+    number: string
+    createdDate: string
+    dueDate: string
+    notes: string
+    items: Array<{ description: string; code: string; quantity: number; unitPrice: number; amount: number }>
+    totals: { total: number; paid: number; balance: number; status: string }
+  }>
+}
+
 export interface DashboardData {
   stats: {
     todayAppointments: number
@@ -233,6 +256,58 @@ id: r.claim.id,
   totals: r.totals,
 })
 
+interface PatientHistoryRaw {
+  appointments: Array<{
+    id: string
+    date: string
+    start_time: string
+    end_time: string
+    title: string
+    room: string
+    status: string
+    notes: string
+    provider: string
+  }>
+  invoices: Array<{
+    id: string
+    number: string
+    createdDate: string
+    dueDate: string
+    notes: string
+    items: Array<{ description: string; code: string; quantity: number; unit_price: number; amount: number }>
+    totals: { total: number; paid: number; balance: number; status: string }
+  }>
+}
+
+const toPatientHistory = (r: PatientHistoryRaw): PatientHistory => ({
+  appointments: (r.appointments ?? []).map((a) => ({
+    id: a.id,
+    date: a.date,
+    startTime: a.start_time ?? '',
+    endTime: a.end_time ?? '',
+    title: a.title ?? '',
+    room: a.room ?? '',
+    status: a.status ?? '',
+    notes: a.notes ?? '',
+    provider: a.provider ?? '',
+  })),
+  invoices: (r.invoices ?? []).map((inv) => ({
+    id: inv.id,
+    number: inv.number,
+    createdDate: inv.createdDate,
+    dueDate: inv.dueDate,
+    notes: inv.notes,
+    items: (inv.items ?? []).map((it) => ({
+      description: it.description,
+      code: it.code,
+      quantity: it.quantity,
+      unitPrice: it.unit_price,
+      amount: it.amount,
+    })),
+    totals: inv.totals,
+  })),
+})
+
 // Endpoint bindings ----------------------------------------------------------
 
 export const api = {
@@ -240,6 +315,8 @@ export const api = {
 
   patients: () => apiFetch<PatientRecord[]>('GET', '/api/patients'),
   patient: (id: string) => apiFetch<PatientRecord>('GET', `/api/patients/${encodeURIComponent(id)}`),
+  patientHistory: (id: string) =>
+    apiFetch<PatientHistoryRaw>('GET', `/api/patients/${encodeURIComponent(id)}/history`).then(toPatientHistory),
   createPatient: (data: object) => apiFetch<PatientRecord>('POST', '/api/patients', data),
   updatePatient: (id: string, data: object) =>
     apiFetch<PatientRecord>('PATCH', `/api/patients/${encodeURIComponent(id)}`, data),

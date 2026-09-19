@@ -2,16 +2,21 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Funnel,
   Export,
+  List,
   SquaresFour,
   SlidersHorizontal,
+  Check,
   Eye,
   PencilSimple,
   Trash,
   CaretLeft,
+  CalendarBlank,
+  Receipt,
 } from '@phosphor-icons/react'
-import { api, useBackendReady, type PatientRecord } from '../api/client'
+import { api, useBackendReady, type PatientHistory, type PatientRecord } from '../api/client'
 import { useLookups } from '../api/lookups-context'
 import { Modal } from '../components/Modal'
+import { PatientCreateModal } from '../components/PatientCreateModal'
 import { useToast } from '../components/toastStore'
 import { currency, dateShort } from '../utils/format'
 import './patients.css'
@@ -33,26 +38,26 @@ const STATUS_CLASS: Record<PatientRecord['clinicalStatus'], string> = {
   INACTIVE: 'badge-inactive',
 }
 
-interface PatientForm {
-  name: string
-  dob: string
-  gender: 'Female' | 'Male' | 'Other'
-  phone: string
-  email: string
-  address: string
-  insuranceId: string
-  notes: string
+const APPT_STATUS_CLASS: Record<string, string> = {
+  scheduled: 'ph-scheduled',
+  confirmed: 'ph-confirmed',
+  completed: 'ph-completed',
+  cancelled: 'ph-cancelled',
+  no_show: 'ph-noshow',
 }
 
-const EMPTY_FORM: PatientForm = {
-  name: '',
-  dob: '',
-  gender: 'Female',
-  phone: '',
-  email: '',
-  address: '',
-  insuranceId: '',
-  notes: '',
+const INVOICE_STATUS_CLASS: Record<string, string> = {
+  paid: 'ph-paid',
+  unpaid: 'ph-unpaid',
+  partial: 'ph-partial',
+  overdue: 'ph-overdue',
+}
+
+const toTime = (hm: string): string => {
+  const [h, m] = hm.split(':').map((x) => Number(x) || 0)
+  const suffix = h >= 12 ? 'PM' : 'AM'
+  const twelve = h % 12 === 0 ? 12 : h % 12
+  return `${twelve}:${String(m).padStart(2, '0')} ${suffix}`
 }
 
 interface PatientsProps {
@@ -68,11 +73,12 @@ const Patients = ({ searchQuery, createOpen, onCreateOpenChange }: PatientsProps
   const [patients, setPatients] = useState<PatientRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<FilterKey>('all')
+  const [filterOpen, setFilterOpen] = useState(false)
   const [view, setView] = useState<ViewMode>('list')
   const [selected, setSelected] = useState<PatientRecord | null>(null)
+  const [history, setHistory] = useState<PatientHistory | null>(null)
+  const [historyLoading, setHistoryLoading] = useState(false)
   const [editing, setEditing] = useState<PatientRecord | null>(null)
-  const [form, setForm] = useState<PatientForm>(EMPTY_FORM)
-  const [saving, setSaving] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -87,6 +93,29 @@ const Patients = ({ searchQuery, createOpen, onCreateOpenChange }: PatientsProps
   useEffect(() => {
     if (ready) void load()
   }, [ready, load])
+
+  useEffect(() => {
+    if (!selected) {
+      setHistory(null)
+      return
+    }
+    let live = true
+    setHistoryLoading(true)
+    api
+      .patientHistory(selected.id)
+      .then((h) => {
+        if (live) setHistory(h)
+      })
+      .catch(() => {
+        if (live) setHistory(null)
+      })
+      .finally(() => {
+        if (live) setHistoryLoading(false)
+      })
+    return () => {
+      live = false
+    }
+  }, [selected])
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
@@ -108,41 +137,12 @@ const Patients = ({ searchQuery, createOpen, onCreateOpenChange }: PatientsProps
 
   const openEdit = (p: PatientRecord) => {
     setEditing(p)
-    setForm({
-      name: p.name,
-      dob: p.dob ?? '',
-      gender: p.gender,
-      phone: p.phone,
-      email: p.email,
-      address: p.address,
-      insuranceId: p.insuranceId,
-      notes: p.notes,
-    })
     onCreateOpenChange(true)
   }
 
-  const handleSave = async () => {
-    if (!form.name.trim()) {
-      toast.push('Patient name is required', { tone: 'warning' })
-      return
-    }
-    setSaving(true)
-    try {
-      if (editing) {
-        await api.updatePatient(editing.id, form)
-        toast.push(`${form.name} updated`)
-      } else {
-        await api.createPatient(form)
-        toast.push(`${form.name} added as a new patient`)
-      }
-      onCreateOpenChange(false)
-      setSelected(null)
-      await load()
-    } catch (err) {
-      toast.push(err instanceof Error ? err.message : 'Failed to save patient', { tone: 'danger' })
-    } finally {
-      setSaving(false)
-    }
+  const closeCreate = () => {
+    onCreateOpenChange(false)
+    setEditing(null)
   }
 
   const handleDelete = async (p: PatientRecord) => {
@@ -158,12 +158,6 @@ const Patients = ({ searchQuery, createOpen, onCreateOpenChange }: PatientsProps
   }
 
   const insuranceName = (id: string): string => insurance.find((i) => i.id === id)?.provider ?? id
-
-  const formField = (key: keyof PatientForm) => ({
-    value: form[key],
-    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
-      setForm((f) => ({ ...f, [key]: e.target.value })),
-  })
 
   return (
     <div className="patients-page">
@@ -181,20 +175,55 @@ const Patients = ({ searchQuery, createOpen, onCreateOpenChange }: PatientsProps
           ))}
         </div>
         <div className="tabs-tools">
-          <button type="button" className="tool-btn" title="Filters">
-            <Funnel size={14} />
-          </button>
+          <div className="tool-group">
+            <button
+              type="button"
+              className={`tool-btn${filterOpen ? ' tool-active' : ''}`}
+              title="Filters"
+              onClick={() => setFilterOpen((v) => !v)}
+            >
+              <Funnel size={14} />
+            </button>
+            {filterOpen && (
+              <div className="filter-menu">
+                {FILTERS.map((f) => (
+                  <button
+                    key={f.key}
+                    type="button"
+                    className={`filter-option${filter === f.key ? ' active' : ''}`}
+                    onClick={() => {
+                      setFilter(f.key)
+                      setFilterOpen(false)
+                    }}
+                  >
+                    <span>{f.label}</span>
+                    {filter === f.key && <Check size={12} weight="bold" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button type="button" className="tool-btn" title="Export" onClick={() => toast.push('Export coming soon', { tone: 'info' })}>
             <Export size={14} />
           </button>
-          <button
-            type="button"
-            className={`tool-btn${view === 'grid' ? ' tool-fill' : ''}`}
-            title="Grid view"
-            onClick={() => setView(view === 'grid' ? 'list' : 'grid')}
-          >
-            <SquaresFour size={14} />
-          </button>
+          <div className="tool-group">
+            <button
+              type="button"
+              className={`tool-btn${view === 'list' ? ' tool-active' : ''}`}
+              title="List view"
+              onClick={() => setView('list')}
+            >
+              <List size={14} />
+            </button>
+            <button
+              type="button"
+              className={`tool-btn${view === 'grid' ? ' tool-active' : ''}`}
+              title="Grid view"
+              onClick={() => setView('grid')}
+            >
+              <SquaresFour size={14} />
+            </button>
+          </div>
           <button type="button" className="tool-btn" title="Columns">
             <SlidersHorizontal size={14} />
           </button>
@@ -202,51 +231,149 @@ const Patients = ({ searchQuery, createOpen, onCreateOpenChange }: PatientsProps
       </section>
 
       <section className="table-card">
-        <div className="pat-header pat-grid">
-          <span className="cell c1">PATIENT NAME</span>
-          <span className="cell c2">ID</span>
-          <span className="cell c3">GENDER / AGE</span>
-          <span className="cell c4">LAST VISIT</span>
-          <span className="cell c5">STATUS</span>
-          <span className="cell c6">OUTSTANDING</span>
-          <span className="cell c7">ACTIONS</span>
-        </div>
-
-        {loading ? (
-          <div className="patients-empty">Loading patients…</div>
-        ) : filtered.length === 0 ? (
-          <div className="patients-empty">No patients match this view.</div>
-        ) : (
-          filtered.map((p, index) => (
-            <div key={p.id} className={`pat-row pat-grid${view === 'grid' ? ' pat-row-grid' : ''}`}>
-              <div className="cell c1">
-                <div className="pat-name">{p.name}</div>
-                <div className="pat-phone">{p.phone}</div>
-              </div>
-              <span className="cell c2 pat-mono">{p.id}</span>
-              <span className="cell c3">{`${p.gender}, ${p.age}`}</span>
-              <div className="cell c4">
-                <div className="pat-visit">{p.lastVisit ? dateShort(p.lastVisit) : '—'}</div>
-                <div className="pat-doctor">{p.doctorName || '—'}</div>
-              </div>
-              <span className="cell c5">
-                <span className={`status-badge ${STATUS_CLASS[p.clinicalStatus]}`}>{p.clinicalStatus}</span>
-              </span>
-              <span className={`cell c6${p.overdue ? ' overdue' : ''}`}>{currency(p.outstanding)}</span>
-              <span className="cell c7">
-                <button type="button" className="row-action" title="View details" onClick={() => setSelected(p)}>
-                  <Eye size={14} />
-                </button>
-                <button type="button" className="row-action" title="Edit" onClick={() => openEdit(p)}>
-                  <PencilSimple size={14} />
-                </button>
-                <button type="button" className="row-action" title="Delete" onClick={() => void handleDelete(p)}>
-                  <Trash size={14} />
-                </button>
-              </span>
-              {index < filtered.length - 1 && <div className="pat-row-sep" style={{ gridColumn: '1 / -1' }} />}
+        {view === 'list' ? (
+          <>
+            <div className="pat-header pat-grid">
+              <span className="cell c1">PATIENT NAME</span>
+              <span className="cell c2">ID</span>
+              <span className="cell c3">GENDER / AGE</span>
+              <span className="cell c4">LAST VISIT</span>
+              <span className="cell c5">STATUS</span>
+              <span className="cell c6">OUTSTANDING</span>
+              <span className="cell c7">ACTIONS</span>
             </div>
-          ))
+
+            {loading ? (
+              <div className="patients-empty">Loading patients…</div>
+            ) : filtered.length === 0 ? (
+              <div className="patients-empty">No patients match this view.</div>
+            ) : (
+              filtered.map((p, index) => (
+                <div key={p.id} className="pat-row pat-grid" onClick={() => setSelected(p)}>
+                  <div className="cell c1">
+                    <div className="pat-name">{p.name}</div>
+                    <div className="pat-phone">{p.phone}</div>
+                  </div>
+                  <span className="cell c2 pat-mono">{p.id}</span>
+                  <span className="cell c3">{`${p.gender}, ${p.age}`}</span>
+                  <div className="cell c4">
+                    <div className="pat-visit">{p.lastVisit ? dateShort(p.lastVisit) : '—'}</div>
+                    <div className="pat-doctor">{p.doctorName || '—'}</div>
+                  </div>
+                  <span className="cell c5">
+                    <span className={`status-badge ${STATUS_CLASS[p.clinicalStatus]}`}>{p.clinicalStatus}</span>
+                  </span>
+                  <span className={`cell c6${p.overdue ? ' overdue' : ''}`}>{currency(p.outstanding)}</span>
+                  <span className="cell c7">
+                    <button
+                      type="button"
+                      className="row-action"
+                      title="View details"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setSelected(p)
+                      }}
+                    >
+                      <Eye size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      className="row-action"
+                      title="Edit"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        openEdit(p)
+                      }}
+                    >
+                      <PencilSimple size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      className="row-action"
+                      title="Delete"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        void handleDelete(p)
+                      }}
+                    >
+                      <Trash size={14} />
+                    </button>
+                  </span>
+                  {index < filtered.length - 1 && <div className="pat-row-sep" style={{ gridColumn: '1 / -1' }} />}
+                </div>
+              ))
+            )}
+          </>
+        ) : (
+          <>
+            {loading ? (
+              <div className="patients-empty">Loading patients…</div>
+            ) : filtered.length === 0 ? (
+              <div className="patients-empty">No patients match this view.</div>
+            ) : (
+              <div className="pat-cards">
+                {filtered.map((p) => (
+                  <div key={p.id} className="pat-card" onClick={() => setSelected(p)}>
+                    <div className="pat-card-top">
+                      <span className="pat-card-avatar">{p.initials}</span>
+                      <span className={`status-badge ${STATUS_CLASS[p.clinicalStatus]}`}>{p.clinicalStatus}</span>
+                    </div>
+                    <div className="pat-card-name">{p.name}</div>
+                    <div className="pat-card-id">{p.id}</div>
+                    <div className="pat-card-rows">
+                      <div>
+                        <span>Phone</span>
+                        <strong>{p.phone || '—'}</strong>
+                      </div>
+                      <div>
+                        <span>Last visit</span>
+                        <strong>{p.lastVisit ? dateShort(p.lastVisit) : '—'}</strong>
+                      </div>
+                      <div>
+                        <span>Outstanding</span>
+                        <strong className={p.overdue ? 'pat-card-overdue' : undefined}>{currency(p.outstanding)}</strong>
+                      </div>
+                    </div>
+                    <div className="pat-card-actions">
+                      <button
+                        type="button"
+                        className="row-action"
+                        title="View details"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelected(p)
+                        }}
+                      >
+                        <Eye size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        className="row-action"
+                        title="Edit"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          openEdit(p)
+                        }}
+                      >
+                        <PencilSimple size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        className="row-action"
+                        title="Delete"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void handleDelete(p)
+                        }}
+                      >
+                        <Trash size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
 
         <div className="table-footer">
@@ -259,74 +386,19 @@ const Patients = ({ searchQuery, createOpen, onCreateOpenChange }: PatientsProps
         </div>
       </section>
 
-      <Modal
+      <PatientCreateModal
         open={createOpen}
-        onClose={() => onCreateOpenChange(false)}
-        title={editing ? `Edit ${editing.name}` : 'New Patient'}
-        subtitle="Patient demographics and contact details"
-        size="md"
-      >
-        <div className="patient-form">
-          <label className="pf-field pf-full">
-            <span>Full name</span>
-            <input {...formField('name')} placeholder="First & last name" />
-          </label>
-          <label className="pf-field">
-            <span>Date of birth</span>
-            <input type="date" {...formField('dob')} />
-          </label>
-          <label className="pf-field">
-            <span>Gender</span>
-            <select {...formField('gender')}>
-              <option value="Female">Female</option>
-              <option value="Male">Male</option>
-              <option value="Other">Other</option>
-            </select>
-          </label>
-          <label className="pf-field">
-            <span>Phone</span>
-            <input {...formField('phone')} placeholder="+1 (555) 000-0000" />
-          </label>
-          <label className="pf-field">
-            <span>Email</span>
-            <input type="email" {...formField('email')} placeholder="name@clinic.com" />
-          </label>
-          <label className="pf-field">
-            <span>Insurance</span>
-            <select {...formField('insuranceId')}>
-              <option value="">No insurance on file</option>
-              {insurance.map((i) => (
-                <option key={i.id} value={i.id}>
-                  {i.provider}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="pf-field pf-full">
-            <span>Address</span>
-            <input {...formField('address')} placeholder="Street, city, state, ZIP" />
-          </label>
-          <label className="pf-field pf-full">
-            <span>Notes</span>
-            <textarea {...formField('notes')} rows={2} placeholder="Allergies, preferences, care notes…" />
-          </label>
-        </div>
-        <div className="patient-form-actions">
-          <button type="button" className="pf-btn pf-cancel" onClick={() => onCreateOpenChange(false)}>
-            Cancel
-          </button>
-          <button type="button" className="pf-btn pf-save" onClick={() => void handleSave()} disabled={saving}>
-            {saving ? 'Saving…' : editing ? 'Save changes' : 'Add patient'}
-          </button>
-        </div>
-      </Modal>
+        onClose={closeCreate}
+        editing={editing}
+        onSaved={() => void load()}
+      />
 
       <Modal
         open={selected !== null}
         onClose={() => setSelected(null)}
         title={selected?.name ?? 'Patient'}
         subtitle={selected ? `${selected.gender}, ${selected.age} · ${insuranceName(selected.insuranceId) || 'No insurance'}` : undefined}
-        size="md"
+        size="lg"
       >
         {selected && (
           <div className="patient-detail">
@@ -360,6 +432,61 @@ const Patients = ({ searchQuery, createOpen, onCreateOpenChange }: PatientsProps
                 <p>{selected.notes}</p>
               </div>
             )}
+
+            <div className="pd-history">
+              <div className="pd-history-block">
+                <div className="pd-history-title">
+                  <CalendarBlank size={13} weight="bold" />
+                  Visit history
+                </div>
+                {historyLoading ? (
+                  <p className="ph-empty">Loading visits…</p>
+                ) : history && history.appointments.length ? (
+                  <ul className="ph-list">
+                    {history.appointments.map((a) => (
+                      <li key={a.id} className="ph-item">
+                        <span className="ph-date">{dateShort(a.date)}</span>
+                        <span className="ph-time">{toTime(a.startTime)}</span>
+                        <span className="ph-main">{a.title}</span>
+                        <span className="ph-meta">
+                          {a.provider || '—'} · {a.room || '—'}
+                        </span>
+                        <span className={`ph-status ${APPT_STATUS_CLASS[a.status] ?? 'ph-scheduled'}`}>{a.status}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="ph-empty">{history ? 'No visits on record.' : 'Could not load visit history.'}</p>
+                )}
+              </div>
+
+              <div className="pd-history-block">
+                <div className="pd-history-title">
+                  <Receipt size={13} weight="bold" />
+                  Bills
+                </div>
+                {historyLoading ? (
+                  <p className="ph-empty">Loading bills…</p>
+                ) : history && history.invoices.length ? (
+                  <ul className="ph-list">
+                    {history.invoices.map((inv) => (
+                      <li key={inv.id} className="ph-item">
+                        <span className="ph-date">{dateShort(inv.createdDate)}</span>
+                        <span className="ph-main">{inv.number}</span>
+                        <span className="ph-meta">{inv.items.length} line items</span>
+                        <span className="ph-amount">{currency(inv.totals.balance)}</span>
+                        <span className={`ph-status ${INVOICE_STATUS_CLASS[inv.totals.status] ?? 'ph-unpaid'}`}>
+                          {inv.totals.status}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="ph-empty">{history ? 'No bills on record.' : 'Could not load billing history.'}</p>
+                )}
+              </div>
+            </div>
+
             <div className="patient-form-actions">
               <button type="button" className="pf-btn pf-danger" onClick={() => void handleDelete(selected)}>
                 <Trash size={13} weight="bold" /> Delete

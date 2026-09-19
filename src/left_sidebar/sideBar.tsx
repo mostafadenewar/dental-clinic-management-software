@@ -40,9 +40,14 @@ interface SideBarProps {
 const SideBar = ({ current, onNavigate }: SideBarProps) => {
   return (
     <nav className="sidebar">
-      <div className="sidebar-logo">
+      <button
+        type="button"
+        className="sidebar-logo"
+        title="Dashboard"
+        onClick={() => onNavigate('dashboard')}
+      >
         <Tooth size={18} weight="fill" color="#ffffff" />
-      </div>
+      </button>
 
       <div className="sidebar-nav">
         {NAV.map((item) => {

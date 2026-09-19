@@ -66,9 +66,18 @@ function App() {
           <main className="app-content">
             {contentPage === 'dashboard' && (
               <Dashboard
+                searchQuery={search}
                 onNavigate={(target) =>
                   handleNavigate(target === 'appointments' || target === 'patients' || target === 'billing' ? target : 'dashboard')
                 }
+                onOpenNewAppointment={() => {
+                  handleNavigate('appointments')
+                  setAppointmentCreateOpen(true)
+                }}
+                onOpenNewPatient={() => {
+                  handleNavigate('patients')
+                  setPatientCreateOpen(true)
+                }}
               />
             )}
             {contentPage === 'patients' && (

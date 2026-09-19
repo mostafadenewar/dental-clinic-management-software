@@ -25,24 +25,21 @@
   letter-spacing: -0.01em;
 }
 
+.header-dashboard h1 {
+  font-size: 17px;
+}
+
+.header-dashboard h3 {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
+}
+
 .header h3 {
   margin: 0;
   font-size: 9px;
   font-weight: 400;
   color: #94a3b8;
-}
-
-.header-date {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 10.5px;
-  font-weight: 500;
-  color: #334155;
-}
-
-.header-date svg {
-  color: #1e293b;
 }
 
 .header-actions {

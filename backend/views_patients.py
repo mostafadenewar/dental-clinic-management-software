@@ -6,7 +6,7 @@ import sqlite3
 from datetime import date, timedelta
 
 from db import iso, row_dict, rows_dicts, today
-from helpers import age_from_dob, initials, patient_outstanding
+from helpers import age_from_dob, initials, invoice_totals, patient_outstanding
 
 
 def _clinical_status(active_plan, outstanding, overdue, last_visit, active):
@@ -122,3 +122,40 @@ def update_patient(conn: sqlite3.Connection, pid: str, data: dict) -> dict | Non
 def delete_patient(conn: sqlite3.Connection, pid: str) -> bool:
     cur = conn.execute("DELETE FROM patients WHERE id = ?", (pid,))
     return cur.rowcount > 0
+
+
+def patient_history(conn: sqlite3.Connection, pid: str) -> dict:
+    """Visits (appointments) and bills (invoices) for a patient."""
+    appointments = rows_dicts(conn.execute(
+        "SELECT ap.id, ap.date, ap.start_time, ap.end_time, ap.title, ap.room, "
+        "ap.status, ap.notes, pr.name AS provider FROM appointments ap "
+        "LEFT JOIN providers pr ON pr.id = ap.provider_id "
+        "WHERE ap.patient_id = ? ORDER BY ap.date DESC, ap.start_time DESC",
+        (pid,),
+    ).fetchall())
+
+    invoices = []
+    for r in conn.execute(
+        "SELECT * FROM invoices WHERE patient_id = ? ORDER BY created_date DESC", (pid,)
+    ).fetchall():
+        inv = row_dict(r)
+        total = conn.execute(
+            "SELECT COALESCE(SUM(amount), 0) AS t FROM invoice_line_items WHERE invoice_id = ?",
+            (inv["id"],),
+        ).fetchone()["t"]
+        items = rows_dicts(conn.execute(
+            "SELECT description, code, quantity, unit_price, amount "
+            "FROM invoice_line_items WHERE invoice_id = ? ORDER BY id", (inv["id"],),
+        ).fetchall())
+        invoices.append({
+            "id": inv["id"],
+            "number": inv["number"],
+            "createdDate": inv["created_date"],
+            "dueDate": inv["due_date"],
+            "notes": inv["notes"],
+            "items": items,
+            "totals": invoice_totals(conn, inv["id"]),
+            "lineTotal": total,
+        })
+
+    return {"appointments": appointments, "invoices": invoices}

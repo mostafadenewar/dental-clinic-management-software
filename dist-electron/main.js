@@ -1,96 +1,144 @@
-import { app as t, ipcMain as f, BrowserWindow as _ } from "electron";
-import { spawn as D } from "node:child_process";
-import { existsSync as E } from "node:fs";
-import { fileURLToPath as P } from "node:url";
-import n from "node:path";
-import T from "node:readline";
-t.disableHardwareAcceleration();
-const a = n.dirname(P(import.meta.url));
-process.env.APP_ROOT = n.join(a, "..");
-const m = process.env.VITE_DEV_SERVER_URL, y = n.join(process.env.APP_ROOT, "dist-electron"), h = n.join(process.env.APP_ROOT, "dist");
-process.env.VITE_PUBLIC = m ? n.join(process.env.APP_ROOT, "public") : h;
-let e, r = null, d = "";
-const R = 1920, g = 1080, k = 1500, w = 1050;
-function v() {
-  const l = [
-    n.join(a, "..", "backend"),
-    n.join(process.resourcesPath ?? "", "backend")
+import { app, ipcMain, BrowserWindow } from "electron";
+import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+import readline from "node:readline";
+app.disableHardwareAcceleration();
+const electronDirectory = path.dirname(fileURLToPath(import.meta.url));
+process.env.APP_ROOT = path.join(electronDirectory, "..");
+const VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
+const MAIN_DIST = path.join(process.env.APP_ROOT, "dist-electron");
+const RENDERER_DIST = path.join(process.env.APP_ROOT, "dist");
+process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, "public") : RENDERER_DIST;
+let applicationWindow;
+let backendProcess = null;
+let backendUrl = "";
+const DEFAULT_WINDOW_WIDTH = 1920;
+const DEFAULT_WINDOW_HEIGHT = 1080;
+const MIN_WINDOW_WIDTH = 1500;
+const MIN_WINDOW_HEIGHT = 1050;
+function backendPath() {
+  const candidates = [
+    path.join(electronDirectory, "..", "backend"),
+    path.join(process.resourcesPath ?? "", "backend")
   ];
-  for (const c of l)
-    if (c && E(n.join(c, "server.py"))) return c;
-  return n.join(a, "..", "backend");
+  for (const dir of candidates) {
+    if (dir && existsSync(path.join(dir, "server.py"))) return dir;
+  }
+  return path.join(electronDirectory, "..", "backend");
 }
-function O() {
-  var u;
-  const l = v(), c = process.env.DCMS_PYTHON ?? "python", I = t.isPackaged ? n.join(t.getPath("userData"), "data", "dental_clinic.db") : n.join(l, "data", "dental_clinic.db"), s = D(c, ["server.py", "--port", "0"], {
-    cwd: l,
-    windowsHide: !0,
+function startBackend() {
+  var _a;
+  const dir = backendPath();
+  const python = process.env.DCMS_PYTHON ?? "python";
+  const dbPath = app.isPackaged ? path.join(app.getPath("userData"), "data", "dental_clinic.db") : path.join(dir, "data", "dental_clinic.db");
+  const child = spawn(python, ["server.py", "--port", "0"], {
+    cwd: dir,
+    windowsHide: true,
     stdio: ["ignore", "pipe", "pipe"],
     env: {
       ...process.env,
-      DCMS_DB: I,
+      DCMS_DB: dbPath,
       PYTHONUNBUFFERED: "1"
     }
   });
-  r = s, T.createInterface({ input: s.stdout }).on("line", (o) => {
-    const i = o.trim().match(/^DCMS_BACKEND_PORT=(\d+)$/);
-    i && (d = `http://127.0.0.1:${i[1]}`, e == null || e.webContents.send("backend-url", d));
-  }), (u = s.stderr) == null || u.on("data", (o) => {
-    console.error(`[dcms] backend: ${o.toString().trimEnd()}`);
-  }), s.on("error", (o) => {
-    console.error("[dcms] failed to start Python backend:", o.message);
-  }), s.on("exit", (o, i) => {
-    r === s && (r = null, d = ""), o !== 0 && i !== "SIGTERM" && console.error(`[dcms] backend exited unexpectedly (code=${o ?? "null"}, signal=${i ?? "null"})`);
+  backendProcess = child;
+  const rl = readline.createInterface({ input: child.stdout });
+  rl.on("line", (line) => {
+    const match = line.trim().match(/^DCMS_BACKEND_PORT=(\d+)$/);
+    if (match) {
+      backendUrl = `http://127.0.0.1:${match[1]}`;
+      applicationWindow == null ? void 0 : applicationWindow.webContents.send("backend-url", backendUrl);
+    }
+  });
+  (_a = child.stderr) == null ? void 0 : _a.on("data", (chunk) => {
+    console.error(`[dcms] backend: ${chunk.toString().trimEnd()}`);
+  });
+  child.on("error", (err) => {
+    console.error("[dcms] failed to start Python backend:", err.message);
+  });
+  child.on("exit", (code, signal) => {
+    if (backendProcess === child) {
+      backendProcess = null;
+      backendUrl = "";
+    }
+    if (code !== 0 && signal !== "SIGTERM") {
+      console.error(`[dcms] backend exited unexpectedly (code=${code ?? "null"}, signal=${signal ?? "null"})`);
+    }
   });
 }
-function j() {
-  r && !r.killed && (r.kill(), r = null);
+function stopBackend() {
+  if (backendProcess && !backendProcess.killed) {
+    backendProcess.kill();
+    backendProcess = null;
+  }
 }
-function b() {
-  e = new _({
-    width: R,
-    height: g,
-    minWidth: k,
-    minHeight: w,
-    frame: !1,
-    show: !1,
+function createWindow() {
+  applicationWindow = new BrowserWindow({
+    width: DEFAULT_WINDOW_WIDTH,
+    height: DEFAULT_WINDOW_HEIGHT,
+    minWidth: MIN_WINDOW_WIDTH,
+    minHeight: MIN_WINDOW_HEIGHT,
+    frame: false,
+    show: false,
     backgroundColor: "#f8fafc",
-    icon: n.join(process.env.VITE_PUBLIC, "electron-vite.svg"),
+    icon: path.join(process.env.VITE_PUBLIC, "electron-vite.svg"),
     webPreferences: {
-      backgroundThrottling: !1,
-      nodeIntegration: !1,
-      contextIsolation: !0,
-      preload: n.join(a, "preload.mjs")
+      backgroundThrottling: false,
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(electronDirectory, "preload.mjs")
     }
-  }), e.once("ready-to-show", () => {
-    e == null || e.show();
-  }), e.webContents.on("did-finish-load", () => {
-    e == null || e.webContents.send("main-process-message", (/* @__PURE__ */ new Date()).toLocaleString()), d && (e == null || e.webContents.send("backend-url", d));
-  }), m ? e.loadURL(m) : e.loadFile(n.join(h, "index.html"));
+  });
+  applicationWindow.once("ready-to-show", () => {
+    applicationWindow == null ? void 0 : applicationWindow.show();
+  });
+  applicationWindow.webContents.on("did-finish-load", () => {
+    applicationWindow == null ? void 0 : applicationWindow.webContents.send("main-process-message", (/* @__PURE__ */ new Date()).toLocaleString());
+    if (backendUrl) {
+      applicationWindow == null ? void 0 : applicationWindow.webContents.send("backend-url", backendUrl);
+    }
+  });
+  if (VITE_DEV_SERVER_URL) {
+    applicationWindow.loadURL(VITE_DEV_SERVER_URL);
+  } else {
+    applicationWindow.loadFile(path.join(RENDERER_DIST, "index.html"));
+  }
 }
-f.on("window-minimize", () => {
-  e == null || e.minimize();
+ipcMain.on("window-minimize", () => {
+  applicationWindow == null ? void 0 : applicationWindow.minimize();
 });
-f.on("window-toggle-maximize", () => {
-  e != null && e.isMaximized() ? e.unmaximize() : e == null || e.maximize();
+ipcMain.on("window-toggle-maximize", () => {
+  if (applicationWindow == null ? void 0 : applicationWindow.isMaximized()) {
+    applicationWindow.unmaximize();
+  } else {
+    applicationWindow == null ? void 0 : applicationWindow.maximize();
+  }
 });
-f.on("window-close", () => {
-  e == null || e.close();
+ipcMain.on("window-close", () => {
+  applicationWindow == null ? void 0 : applicationWindow.close();
 });
-t.on("window-all-closed", () => {
-  process.platform !== "darwin" && (t.quit(), e = null);
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") {
+    app.quit();
+    applicationWindow = null;
+  }
 });
-t.on("activate", () => {
-  _.getAllWindows().length === 0 && b();
+app.on("activate", () => {
+  if (BrowserWindow.getAllWindows().length === 0) {
+    createWindow();
+  }
 });
-t.on("will-quit", () => {
-  j();
+app.on("will-quit", () => {
+  stopBackend();
 });
-t.whenReady().then(() => {
-  O(), b();
+app.whenReady().then(() => {
+  startBackend();
+  createWindow();
 });
 export {
-  y as MAIN_DIST,
-  h as RENDERER_DIST,
-  m as VITE_DEV_SERVER_URL
+  MAIN_DIST,
+  RENDERER_DIST,
+  VITE_DEV_SERVER_URL
 };
