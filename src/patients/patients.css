@@ -267,3 +267,213 @@
   font-size: 12px;
   color: #cbd5e1;
 }
+
+/* ------------------------------------------------------------------------- */
+/* Patients workspace additions                                             */
+/* ------------------------------------------------------------------------- */
+
+.patients-empty {
+  padding: 34px 20px;
+  text-align: center;
+  font-size: 10.5px;
+  color: #94a3b8;
+}
+
+.cell.c7 {
+  gap: 2px;
+}
+
+.pat-row-sep {
+  height: 1px;
+  background: #f8fafc;
+}
+
+.patient-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 14px;
+}
+
+.pf-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+}
+
+.pf-field > span {
+  font-size: 9.5px;
+  font-weight: 500;
+  color: #64748b;
+  letter-spacing: 0.02em;
+}
+
+.pf-field input,
+.pf-field select,
+.pf-field textarea {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 11px;
+  color: #1e293b;
+  padding: 8px 10px;
+  background: #ffffff;
+  outline: none;
+  font-family: inherit;
+}
+
+.pf-field input:focus,
+.pf-field select:focus,
+.pf-field textarea:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.pf-field textarea {
+  resize: vertical;
+}
+
+.pf-full {
+  grid-column: 1 / -1;
+}
+
+.patient-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.pf-btn {
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 8px 14px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: inherit;
+}
+
+.pf-save {
+  background-color: #2563eb;
+  color: #ffffff;
+}
+
+.pf-save:hover {
+  background-color: #1d4ed8;
+}
+
+.pf-save:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.pf-cancel {
+  background-color: #f1f5f9;
+  color: #475569;
+}
+
+.pf-cancel:hover {
+  background-color: #e2e8f0;
+}
+
+.pf-danger {
+  background-color: #fef2f2;
+  color: #dc2626;
+}
+
+.pf-danger:hover {
+  background-color: #fee2e2;
+}
+
+.patient-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pd-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.pd-stat {
+  background: #f8fafc;
+  border: 1px solid #eef2f7;
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.pd-stat > span {
+  font-size: 9px;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pd-stat > strong {
+  font-size: 11.5px;
+  color: #1e293b;
+  align-self: flex-start;
+}
+
+.pd-overdue {
+  color: #dc2626;
+}
+
+.pd-rows {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 16px;
+  border-top: 1px solid #eef2f7;
+  border-bottom: 1px solid #eef2f7;
+  padding: 12px 0;
+}
+
+.pd-rows > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pd-rows > div > span {
+  font-size: 10px;
+  color: #94a3b8;
+}
+
+.pd-rows > div > strong {
+  font-size: 10.5px;
+  color: #334155;
+  text-align: right;
+}
+
+.pd-notes > span {
+  font-size: 9px;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pd-notes > p {
+  margin: 6px 0 0 0;
+  font-size: 10.5px;
+  color: #475569;
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 9px 11px;
+}
+
+.patient-detail .patient-form-actions {
+  margin-top: 6px;
+}
+
+.patient-detail .pf-btn:first-of-type {
+  margin-right: auto;
+}

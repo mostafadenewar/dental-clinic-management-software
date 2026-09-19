@@ -349,3 +349,19 @@
   font-size: 9px;
   color: #94a3b8;
 }
+
+.activity-slate {
+  background-color: #f1f5f9;
+  color: #64748b;
+}
+
+.schedule-empty,
+.activity-empty {
+  margin: 14px 0;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.trend-panel {
+  margin-top: 18px;
+}

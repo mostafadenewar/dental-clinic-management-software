@@ -1,6 +1,9 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
+import { spawn, ChildProcess } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import readline from 'node:readline'
 
 // NVIDIA's capture overlay can leave Chromium's accelerated surface in a
 // degraded state after recording stops. Software compositing avoids that
@@ -28,11 +31,56 @@ export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 'public') : RENDERER_DIST
 
 let applicationWindow: BrowserWindow | null
+let backendProcess: ChildProcess | null = null
+let backendUrl = ''
 
 const DEFAULT_WINDOW_WIDTH = 1920
 const DEFAULT_WINDOW_HEIGHT = 1080
 const MIN_WINDOW_WIDTH = 1500
 const MIN_WINDOW_HEIGHT = 1050
+
+// The Python backend lives next to the main process source. In a packaged app
+// electron-builder must place `backend/` under resources (see electron-builder.json5).
+function backendPath(): string {
+  const candidates = [
+    path.join(electronDirectory, '..', 'backend'),
+    path.join(process.resourcesPath ?? '', 'backend'),
+  ]
+  for (const dir of candidates) {
+    if (dir && existsSync(path.join(dir, 'server.py'))) return dir
+  }
+  return path.join(electronDirectory, '..', 'backend')
+}
+
+function startBackend() {
+  const dir = backendPath()
+  const python = process.env.DCMS_PYTHON ?? 'python'
+  const child = spawn(python, ['server.py'], {
+    cwd: dir,
+    windowsHide: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  backendProcess = child
+
+  const rl = readline.createInterface({ input: child.stdout })
+  rl.on('line', (line) => {
+    const match = line.trim().match(/^DCMS_BACKEND_PORT=(\d+)$/)
+    if (match) {
+      backendUrl = `http://127.0.0.1:${match[1]}`
+      applicationWindow?.webContents.send('backend-url', backendUrl)
+    }
+  })
+  child.on('error', (err) => {
+    console.error('[dcms] failed to start Python backend:', err.message)
+  })
+}
+
+function stopBackend() {
+  if (backendProcess && !backendProcess.killed) {
+    backendProcess.kill()
+    backendProcess = null
+  }
+}
 
 function createWindow() {
   applicationWindow = new BrowserWindow({
@@ -59,6 +107,9 @@ function createWindow() {
   // Test active push message to Renderer-process.
   applicationWindow.webContents.on('did-finish-load', () => {
     applicationWindow?.webContents.send('main-process-message', (new Date).toLocaleString())
+    if (backendUrl) {
+      applicationWindow?.webContents.send('backend-url', backendUrl)
+    }
   })
 
   if (VITE_DEV_SERVER_URL) {
@@ -103,4 +154,11 @@ app.on('activate', () => {
   }
 })
 
-app.whenReady().then(createWindow)
+app.on('will-quit', () => {
+  stopBackend()
+})
+
+app.whenReady().then(() => {
+  startBackend()
+  createWindow()
+})

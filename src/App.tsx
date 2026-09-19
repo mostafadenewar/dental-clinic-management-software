@@ -25,6 +25,8 @@ function App() {
   const [treatmentCreateOpen, setTreatmentCreateOpen] = useState(false)
   const [billingCreateOpen, setBillingCreateOpen] = useState(false)
   const [inventoryCreateOpen, setInventoryCreateOpen] = useState(false)
+  const [patientCreateOpen, setPatientCreateOpen] = useState(false)
+  const [appointmentCreateOpen, setAppointmentCreateOpen] = useState(false)
 
   const handleNavigate = (next: PageKey) => {
     setPage(next)
@@ -41,6 +43,12 @@ function App() {
     if (page === 'inventory') {
       return { label: 'Add Stock', onClick: () => setInventoryCreateOpen(true) }
     }
+    if (page === 'patients') {
+      return { label: 'New Patient', onClick: () => setPatientCreateOpen(true) }
+    }
+    if (page === 'appointments') {
+      return { label: 'New Appointment', onClick: () => setAppointmentCreateOpen(true) }
+    }
     return undefined
   })()
 
@@ -56,9 +64,27 @@ function App() {
             primaryAction={primaryAction}
           />
           <main className="app-content">
-            {contentPage === 'dashboard' && <Dashboard />}
-            {contentPage === 'patients' && <Patients />}
-            {contentPage === 'appointments' && <Appointments />}
+            {contentPage === 'dashboard' && (
+              <Dashboard
+                onNavigate={(target) =>
+                  handleNavigate(target === 'appointments' || target === 'patients' || target === 'billing' ? target : 'dashboard')
+                }
+              />
+            )}
+            {contentPage === 'patients' && (
+              <Patients
+                searchQuery={search}
+                createOpen={patientCreateOpen}
+                onCreateOpenChange={setPatientCreateOpen}
+              />
+            )}
+            {contentPage === 'appointments' && (
+              <Appointments
+                searchQuery={search}
+                createOpen={appointmentCreateOpen}
+                onCreateOpenChange={setAppointmentCreateOpen}
+              />
+            )}
             {contentPage === 'treatment' && (
               <TreatmentPlans
                 searchQuery={search}

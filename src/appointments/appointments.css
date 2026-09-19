@@ -385,3 +385,179 @@
 .ai-button:hover {
   background-color: #eff6ff;
 }
+
+/* ------------------------------------------------------------------------- */
+/* Appointments workspace additions                                         */
+/* ------------------------------------------------------------------------- */
+
+.appt-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.appt-week-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.week-btn {
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #475569;
+  font-size: 9.5px;
+  font-weight: 500;
+  border-radius: 7px;
+  padding: 5px 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: inherit;
+}
+
+.week-btn:hover {
+  background-color: #f1f5f9;
+  color: #2563eb;
+}
+
+.appt-week-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.appt-block {
+  cursor: pointer;
+}
+
+.appt-block:hover {
+  filter: brightness(0.97);
+}
+
+.appt-day-loading {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  font-size: 9px;
+  color: #94a3b8;
+}
+
+.appt-day-col:hover {
+  background-color: rgba(37, 99, 235, 0.03);
+}
+
+.agenda-empty {
+  font-size: 10px;
+  color: #94a3b8;
+  margin: 8px 0 14px 0;
+}
+
+.agenda-status {
+  margin-top: 10px;
+  background-color: #f1f5f9;
+  color: #475569;
+  font-size: 9px;
+  font-weight: 500;
+  border-radius: 7px;
+  padding: 6px 12px;
+  text-align: center;
+}
+
+.appt-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 14px;
+}
+
+.af-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+}
+
+.af-field > span {
+  font-size: 9.5px;
+  font-weight: 500;
+  color: #64748b;
+  letter-spacing: 0.02em;
+}
+
+.af-field input,
+.af-field select,
+.af-field textarea {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 11px;
+  color: #1e293b;
+  padding: 8px 10px;
+  background: #ffffff;
+  outline: none;
+  font-family: inherit;
+}
+
+.af-field input:focus,
+.af-field select:focus,
+.af-field textarea:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.af-field textarea {
+  resize: vertical;
+}
+
+.af-full {
+  grid-column: 1 / -1;
+}
+
+.appt-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.pf-btn {
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 8px 14px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: inherit;
+}
+
+.pf-save {
+  background-color: #2563eb;
+  color: #ffffff;
+}
+
+.pf-save:hover {
+  background-color: #1d4ed8;
+}
+
+.pf-save:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.pf-cancel {
+  background-color: #f1f5f9;
+  color: #475569;
+}
+
+.pf-cancel:hover {
+  background-color: #e2e8f0;
+}

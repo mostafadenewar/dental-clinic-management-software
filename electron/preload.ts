@@ -22,3 +22,13 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   // You can expose other APTs you need here.
   // ...
 })
+
+// Backend URL bridge: the main process spawns the Python API server and
+// pushes the resolved base URL to the renderer on `backend-url`.
+contextBridge.exposeInMainWorld('dcms', {
+  onBackendUrl(callback: (url: string) => void) {
+    const listener = (_event: Electron.IpcRendererEvent, url: string) => callback(url)
+    ipcRenderer.on('backend-url', listener)
+    return () => ipcRenderer.removeListener('backend-url', listener)
+  },
+})

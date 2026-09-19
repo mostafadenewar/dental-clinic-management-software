@@ -11,6 +11,16 @@
     "dist",
     "dist-electron"
   ],
+  "extraResources": [
+    {
+      "from": "backend",
+      "to": "backend",
+      "filter": [
+        "**/*.py",
+        "!**/__pycache__/**"
+      ]
+    }
+  ],
   "mac": {
     "target": [
       "dmg"

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   TrendUp,
   CurrencyDollar,
@@ -15,17 +15,12 @@ import type {
   Invoice,
   InvoiceFilterKey,
   InvoiceStatus,
+  InvoiceTotals,
   Payment,
   PaymentMethod,
-  InsuranceClaim,
 } from '../types'
-import { AS_OF_DATE, PATIENTS } from '../data/treatmentData'
-import {
-  INITIAL_INVOICES,
-  REVENUE_TREND,
-  NET_REVENUE_TARGET,
-  MONTH_AS_OF,
-} from '../data/billingData'
+import { api, useBackendReady, type BillingSummary } from '../api/client'
+import { useLookups } from '../api/lookups'
 import { currency, currencyWhole, dateShort } from '../utils/format'
 import { Modal } from '../components/Modal'
 import { TrendChart } from '../components/Charts'
@@ -46,29 +41,9 @@ const STATUS_TONE: Record<InvoiceStatus, string> = {
   overdue: 'ui-pill-red',
 }
 
-const sourceDay = (iso: string) => new Date(`${iso}T00:00:00`)
-const daysBetween = (fromIso: string, toIso: string) =>
-  Math.round((sourceDay(toIso).getTime() - sourceDay(fromIso).getTime()) / 86400000)
+const NET_REVENUE_TARGET = 55000
 
-interface InvoiceTotals {
-  total: number
-  paid: number
-  balance: number
-  status: InvoiceStatus
-}
-
-const computeTotals = (inv: Invoice): InvoiceTotals => {
-  const total = inv.lineItems.reduce((s, li) => s + li.amount, 0)
-  const paid = inv.payments.reduce((s, p) => s + p.amount, 0)
-  const balance = Math.max(0, total - paid)
-  let status: InvoiceStatus
-  if (balance <= 0.001) status = 'paid'
-  else if (paid <= 0.001 && daysBetween(inv.dueDate, AS_OF_DATE) > 0) status = 'overdue'
-  else if (daysBetween(inv.dueDate, AS_OF_DATE) > 0) status = 'overdue'
-  else if (paid <= 0.001) status = 'unpaid'
-  else status = 'partial'
-  return { total, paid, balance, status }
-}
+type InvoiceWithTotals = Invoice & { totals: InvoiceTotals }
 
 const STATUS_MATCHES: Record<InvoiceFilterKey, (s: InvoiceStatus) => boolean> = {
   all: () => true,
@@ -88,123 +63,124 @@ const matchesQuery = (inv: Invoice, q: string): boolean => {
   )
 }
 
-const nextInvoiceNumber = (invoices: Invoice[]) =>
-  `INV-2026-${String(170 + invoices.length).padStart(4, '0')}`
-
 interface BillingProps {
   searchQuery: string
   createOpen: boolean
   onCreateOpenChange: (open: boolean) => void
 }
 
+const toIso2 = (d: Date) => {
+  const m = `${d.getMonth() + 1}`.padStart(2, '0')
+  const day = `${d.getDate()}`.padStart(2, '0')
+  return `${d.getFullYear()}-${m}-${day}`
+}
+
+const AGING_BUCKETS = [
+  { key: '0-30', label: '0-30 days' },
+  { key: '31-60', label: '31-60 days' },
+  { key: '61-90', label: '61-90 days' },
+  { key: '90+', label: '90+ days' },
+]
+
 const Billing = ({ searchQuery, createOpen, onCreateOpenChange }: BillingProps) => {
   const toast = useToast()
-  const [invoices, setInvoices] = useState<Invoice[]>(INITIAL_INVOICES)
+  const ready = useBackendReady()
+  const { patients } = useLookups()
+  const [invoices, setInvoices] = useState<InvoiceWithTotals[]>([])
+  const [summary, setSummary] = useState<BillingSummary | null>(null)
+  const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<InvoiceFilterKey>('all')
   const [detailId, setDetailId] = useState<string | null>(null)
   const [payId, setPayId] = useState<string | null>(null)
   const [statementOpen, setStatementOpen] = useState(false)
 
+  const load = useCallback(async () => {
+    try {
+      const [invList, billingSummary] = await Promise.all([api.invoices(), api.billingSummary()])
+      setInvoices(invList)
+      setSummary(billingSummary)
+    } catch {
+      setInvoices([])
+      setSummary(null)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (ready) {
+      load()
+    }
+  }, [ready, load])
+
   const visible = useMemo(
-    () => invoices.filter((inv) => STATUS_MATCHES[filter](computeTotals(inv).status) && matchesQuery(inv, searchQuery)),
+    () => invoices.filter((inv) => STATUS_MATCHES[filter](inv.totals.status) && matchesQuery(inv, searchQuery)),
     [invoices, filter, searchQuery],
   )
 
   const detailInvoice = invoices.find((i) => i.id === detailId) ?? null
   const payInvoice = invoices.find((i) => i.id === payId) ?? null
 
-  const netRevenue = useMemo(
-    () =>
-      invoices
-        .flatMap((inv) => inv.payments)
-        .filter((p) => p.date.startsWith('2026-05'))
-        .reduce((s, p) => s + p.amount, 0),
-    [invoices],
-  )
-
-  const activeClaims = useMemo(
-    () =>
-      invoices
-        .filter((inv) => inv.claim && ['pending', 'processing', 'submitted'].includes(inv.claim.status))
-        .map((inv) => inv.claim as InsuranceClaim),
-    [invoices],
-  )
-
-  const outstanding = useMemo(() => {
-    const list = invoices.filter((inv) => computeTotals(inv).balance > 0)
-    return {
-      count: list.length,
-      amount: list.reduce((s, inv) => s + computeTotals(inv).balance, 0),
-    }
-  }, [invoices])
-
-  const aging = useMemo(() => {
-    const buckets = [
-      { key: '0-30', label: '0-30 days', min: 0, max: 30 },
-      { key: '31-60', label: '31-60 days', min: 31, max: 60 },
-      { key: '61-90', label: '61-90 days', min: 61, max: 90 },
-      { key: '90+', label: '90+ days', min: 91, max: Infinity },
-    ]
-    return buckets.map((b) => {
-      const amount = invoices
-        .filter((inv) => {
-          const t = computeTotals(inv)
-          if (t.balance <= 0.001) return false
-          const age = daysBetween(inv.createdDate, AS_OF_DATE)
-          return age >= b.min && age <= b.max
-        })
-        .reduce((s, inv) => s + computeTotals(inv).balance, 0)
-      return { ...b, amount }
-    })
-  }, [invoices])
+  const netRevenue = summary?.netRevenue ?? 0
+  const activeClaims = summary?.activeClaims ?? []
+  const outstanding = {
+    count: summary?.outstandingCount ?? 0,
+    amount: summary?.outstandingAmount ?? 0,
+  }
+  const aging = summary?.aging
+    ? summary.aging.map((amount: number, i: number) => ({ amount, ...AGING_BUCKETS[i] }))
+    : AGING_BUCKETS.map((b) => ({ amount: 0, ...b }))
 
   const revenuePct = Math.min(100, Math.round((netRevenue / NET_REVENUE_TARGET) * 100))
   const claimAmount = activeClaims.reduce((s, c) => s + c.amount, 0)
   const maxAging = Math.max(1, ...aging.map((a) => a.amount))
 
-  const recordPayment = (id: string, payment: Payment) => {
-    setInvoices((prev) =>
-      prev.map((inv) => (inv.id === id ? { ...inv, payments: [...inv.payments, payment] } : inv)),
-    )
+  const oldestOpen = invoices
+    .filter((inv) => inv.totals.balance > 0)
+    .sort((a, b) => a.createdDate.localeCompare(b.createdDate))[0]
+
+  const recordPayment = async (id: string, payment: { amount: number; method: PaymentMethod; date: string; reference: string }) => {
+    try {
+      const updated = await api.recordPayment(id, payment)
+      setInvoices((prev) => prev.map((inv) => (inv.id === id ? updated : inv)))
+      setSummary(await api.billingSummary())
+    } catch (err) {
+      toast.push(err instanceof Error ? err.message : 'Payment failed', { tone: 'danger' })
+    }
   }
 
-  const createInvoice = (
+  const createInvoice = async (
     patientId: string,
     lineItems: { description: string; code: string; quantity: number; unitPrice: number }[],
     notes: string,
   ) => {
-    const patient = PATIENTS.find((p) => p.id === patientId) ?? PATIENTS[0]
-    const items = lineItems
-      .filter((li) => li.description.trim())
-      .map((li, i) => ({
-        id: `LI-NEW-${i}`,
-        description: li.description.trim(),
-        code: li.code,
-        quantity: li.quantity,
-        unitPrice: li.unitPrice,
-        amount: li.quantity * li.unitPrice,
-        tooth: '',
-      }))
-    const newInvoice: Invoice = {
-      id: `INV-${Date.now().toString(36)}`,
-      number: nextInvoiceNumber(invoices),
-      patient,
-      createdDate: AS_OF_DATE,
-      dueDate: '2026-06-25',
-      lineItems: items,
-      payments: [],
-      claim: null,
-      notes,
+    try {
+      const invoice = await api.createInvoice({
+        patientId,
+        items: lineItems.map((li) => ({ ...li, tooth: '' })),
+        notes,
+      })
+      setInvoices((prev) => [invoice, ...prev])
+      setSummary(await api.billingSummary())
+      onCreateOpenChange(false)
+      toast.push(`Invoice ${invoice.number} created for ${invoice.patient.name}`)
+    } catch (err) {
+      toast.push(err instanceof Error ? err.message : 'Invoice creation failed', { tone: 'danger' })
     }
-    setInvoices((prev) => [newInvoice, ...prev])
-    onCreateOpenChange(false)
-    toast.push(`Invoice ${newInvoice.number} created for ${patient.name}`)
+  }
+
+  const refreshSummary = async () => {
+    try {
+      setSummary(await api.billingSummary())
+    } catch {
+      /* keep last known summary */
+    }
   }
 
   const exportCsv = () => {
     const header = ['Invoice #', 'Patient', 'Date', 'Services', 'Amount', 'Paid', 'Balance', 'Status'].join(',')
     const rows = visible.map((inv) => {
-      const t = computeTotals(inv)
+      const t = inv.totals
       return [
         inv.number,
         `"${inv.patient.name}"`,
@@ -241,7 +217,7 @@ const Billing = ({ searchQuery, createOpen, onCreateOpenChange }: BillingProps) 
           tone="green"
           label="Net Revenue"
           value={currencyWhole(netRevenue)}
-          hint={`${MONTH_AS_OF} · collected`}
+          hint={`${new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} · collected`}
         >
           <div className="bd-target">
             <div className="bd-target-top">
@@ -265,7 +241,7 @@ const Billing = ({ searchQuery, createOpen, onCreateOpenChange }: BillingProps) 
         >
           <div className="bd-kpi-sub">
             <span className="bd-agingsum">
-              {daysBetween('2026-04-26', AS_OF_DATE) > 30 ? '40 days' : 'Recent'} since oldest open invoice
+              {oldestOpen ? `${Math.max(1, Math.round((Date.now() - new Date(`${oldestOpen.createdDate}T00:00:00`).getTime()) / 86400000))} days` : '—'} since oldest open invoice
             </span>
           </div>
         </KpiCard>
@@ -297,7 +273,7 @@ const Billing = ({ searchQuery, createOpen, onCreateOpenChange }: BillingProps) 
             </div>
           </div>
           <TrendChart
-            data={REVENUE_TREND.map((d) => ({ label: d.month, value: d.revenue, secondary: d.collected }))}
+            data={summary?.revenueTrend.map((d) => ({ label: d.month, value: d.revenue, secondary: d.collected })) ?? []}
             height={190}
             barColor="#2563eb"
             lineColor="#10b981"
@@ -306,7 +282,15 @@ const Billing = ({ searchQuery, createOpen, onCreateOpenChange }: BillingProps) 
           />
           <div className="bd-chart-foot">
             <span>Collections rate</span>
-            <strong>{Math.round((REVENUE_TREND.reduce((s, d) => s + d.collected, 0) / REVENUE_TREND.reduce((s, d) => s + d.revenue, 0)) * 100)}%</strong>
+            <strong>
+              {summary && summary.revenueTrend.length > 0
+                ? `${Math.round(
+                    (summary.revenueTrend.reduce((s, d) => s + d.collected, 0) /
+                      summary.revenueTrend.reduce((s, d) => s + d.revenue, 0)) *
+                      100,
+                  )}%`
+                : '—'}
+            </strong>
           </div>
         </section>
 
@@ -384,7 +368,7 @@ const Billing = ({ searchQuery, createOpen, onCreateOpenChange }: BillingProps) 
         </div>
 
         {visible.map((inv) => {
-          const t = computeTotals(inv)
+          const t = inv.totals
           return (
             <div key={inv.id} className="bd-row bd-grid">
               <button type="button" className="bd-invoice-num" onClick={() => setDetailId(inv.id)}>
@@ -440,7 +424,7 @@ const Billing = ({ searchQuery, createOpen, onCreateOpenChange }: BillingProps) 
 
         <div className="bd-table-foot">
           <span>
-            Showing {visible.length} of {invoices.length} invoices
+            {loading ? 'Loading invoices…' : `Showing ${visible.length} of ${invoices.length} invoices`}
           </span>
           <span className="bd-total-label">
             Outstanding <strong>{currencyWhole(outstanding.amount)}</strong>
@@ -448,7 +432,9 @@ const Billing = ({ searchQuery, createOpen, onCreateOpenChange }: BillingProps) 
         </div>
       </section>
 
-      {createOpen && <CreateInvoiceModal onClose={() => onCreateOpenChange(false)} onCreate={createInvoice} />}
+      {createOpen && !loading && (
+        <CreateInvoiceModal patients={patients} onClose={() => onCreateOpenChange(false)} onCreate={createInvoice} />
+      )}
 
       {detailInvoice && (
         <InvoiceDetailsModal
@@ -465,10 +451,11 @@ const Billing = ({ searchQuery, createOpen, onCreateOpenChange }: BillingProps) 
       {payInvoice && (
         <RecordPaymentModal
           invoice={payInvoice}
-          balance={computeTotals(payInvoice).balance}
+          balance={payInvoice.totals.balance}
           onClose={() => setPayId(null)}
           onSave={(payment) => {
             recordPayment(payInvoice.id, payment)
+            refreshSummary()
             toast.push(`Payment of ${currency(payment.amount)} recorded on ${payInvoice.number}`)
           }}
         />
@@ -529,13 +516,15 @@ interface DraftLine {
 }
 
 function CreateInvoiceModal({
+  patients,
   onClose,
   onCreate,
 }: {
+  patients: { id: string; name: string }[]
   onClose: () => void
   onCreate: (patientId: string, lines: DraftLine[], notes: string) => void
 }) {
-  const [patientId, setPatientId] = useState(PATIENTS[0].id)
+  const [patientId, setPatientId] = useState(patients[0]?.id ?? '')
   const [lines, setLines] = useState<DraftLine[]>([{ description: '', code: '', quantity: 1, unitPrice: 0 }])
   const [notes, setNotes] = useState('')
 
@@ -585,7 +574,7 @@ function CreateInvoiceModal({
             value={patientId}
             onChange={(e) => setPatientId(e.target.value)}
           >
-            {PATIENTS.map((p) => (
+            {patients.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name} · {p.id}
               </option>
@@ -675,13 +664,13 @@ function InvoiceDetailsModal({
   onPrint,
   onSend,
 }: {
-  invoice: Invoice
+  invoice: InvoiceWithTotals
   onClose: () => void
   onRecord: () => void
   onPrint: () => void
   onSend: () => void
 }) {
-  const t = computeTotals(invoice)
+  const t = invoice.totals
   return (
     <Modal
       open
@@ -812,7 +801,7 @@ function RecordPaymentModal({
 }) {
   const [amount, setAmount] = useState(balance)
   const [method, setMethod] = useState<PaymentMethod>('card')
-  const [date, setDate] = useState(AS_OF_DATE)
+  const [date, setDate] = useState(toIso2(new Date()))
   const [reference, setReference] = useState('')
 
   const submit = () => {
@@ -914,12 +903,12 @@ function StatementModal({
   onClose,
   onSend,
 }: {
-  invoices: Invoice[]
+  invoices: InvoiceWithTotals[]
   onClose: () => void
   onSend: () => void
 }) {
-  const withBalance = invoices.filter((inv) => computeTotals(inv).balance > 0)
-  const total = withBalance.reduce((s, inv) => s + computeTotals(inv).balance, 0)
+  const withBalance = invoices.filter((inv) => inv.totals.balance > 0)
+  const total = withBalance.reduce((s, inv) => s + inv.totals.balance, 0)
 
   return (
     <Modal
@@ -948,7 +937,7 @@ function StatementModal({
           </div>
         )}
         {withBalance.map((inv) => {
-          const t = computeTotals(inv)
+          const t = inv.totals
           return (
             <div key={inv.id} className="st-row">
               <div className="st-avatar">{inv.patient.initials}</div>

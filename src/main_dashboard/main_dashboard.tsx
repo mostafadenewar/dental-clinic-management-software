@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useState } from 'react'
 import {
   CalendarPlus,
   UserPlus,
@@ -10,85 +11,74 @@ import {
   Users,
   CurrencyCircleDollar,
 } from '@phosphor-icons/react'
+import { api, useBackendReady, type DashboardData } from '../api/client'
+import { TrendChart, type TrendPoint } from '../components/Charts'
+import { currencyWhole } from '../utils/format'
 import './main_dashboard.css'
 
 type StatusTone = 'green' | 'slate' | 'amber' | 'red'
 
-const STATUS: Record<StatusTone, { label: string; className: string }> = {
-  green: { label: 'In Progress', className: 'pill-green' },
-  slate: { label: 'Upcoming', className: 'pill-slate' },
-  amber: { label: 'Confirmed', className: 'pill-amber' },
-  red: { label: 'Cancelled', className: 'pill-red' },
+const STATUS: Record<StatusTone, string> = {
+  green: 'pill-green',
+  slate: 'pill-slate',
+  amber: 'pill-amber',
+  red: 'pill-red',
 }
 
-interface ScheduleRow {
-  time: string
-  patient: string
-  detail: string
-  status: StatusTone
+const ACTIVITY_ICONS: Record<string, React.ReactNode> = {
+  check: <Check size={13} weight="bold" />,
+  flask: <Flask size={13} weight="bold" />,
+  package: <Package size={13} weight="bold" />,
+  user: <Users size={13} weight="bold" />,
+  calendar: <Calendar size={13} weight="bold" />,
+  dollar: <CurrencyCircleDollar size={13} weight="bold" />,
 }
 
-const SCHEDULE: ScheduleRow[] = [
-  { time: '09:00', patient: 'Maria Lawson', detail: 'Routine Checkup · Room 1', status: 'green' },
-  { time: '10:30', patient: 'James Carter', detail: 'Root Canal · Room 3', status: 'slate' },
-  { time: '12:00', patient: 'Priya Nair', detail: 'Teeth Whitening · Room 2', status: 'slate' },
-  { time: '14:15', patient: 'Robert Hayes', detail: 'Dental Implant Consult · Room 1', status: 'amber' },
-  { time: '16:00', patient: 'Emily Brooks', detail: 'Follow-up · Room 2', status: 'red' },
-]
-
-interface ActivityItem {
-  icon: React.ReactNode
-  tone: string
-  text: string
-  time: string
+interface MainDashboardProps {
+  onNavigate: (page: 'appointments' | 'patients' | 'billing') => void
 }
 
-const ACTIVITY: ActivityItem[] = [
-  {
-    icon: <Check size={13} weight="bold" />,
-    tone: 'activity-green',
-    text: 'John Doe completed treatment',
-    time: '10 min ago',
-  },
-  {
-    icon: <Flask size={13} weight="bold" />,
-    tone: 'activity-blue',
-    text: 'Lab report received for Maria L.',
-    time: '45 min ago',
-  },
-  {
-    icon: <Package size={13} weight="bold" />,
-    tone: 'activity-amber',
-    text: 'Low stock: Composite Resin',
-    time: '1 hour ago',
-  },
-  {
-    icon: <UserPlus size={13} weight="bold" />,
-    tone: 'activity-teal',
-    text: 'New patient Priya Nair registered',
-    time: '2 hours ago',
-  },
-]
+const MainDashboard = ({ onNavigate }: MainDashboardProps) => {
+  const ready = useBackendReady()
+  const [data, setData] = useState<DashboardData | null>(null)
 
-const MainDashboard = () => {
+  const load = useCallback(async () => {
+    try {
+      setData(await api.dashboard())
+    } catch {
+      setData(null)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (ready) void load()
+  }, [ready, load])
+
+  const stats = data?.stats
+  const revenueTrend: TrendPoint[] =
+    data?.revenueTrend.map((p) => ({ label: p.month, value: p.revenue, secondary: p.collected })) ?? []
+
+  const newPatientsDelta = (stats?.newPatientsWeek ?? 0) - (stats?.newPatientsPrevWeek ?? 0)
+  const showNewDelta = stats ? newPatientsDelta >= 0 : false
+
   return (
     <div className="dashboard-page">
       <div className="stats-row">
         <div className="stat-card">
           <div className="stat-icon stat-icon-big">
             <div className="stat-icon-readout">
-              <strong>9</strong>
-              <span>of 12</span>
+              <strong>{stats?.todayAppointments ?? '–'}</strong>
+              <span>today</span>
             </div>
           </div>
           <div className="stat-body">
             <div className="stat-title">Today's Appointments</div>
             <div className="stat-value">
-              <strong>9</strong> Scheduled
+              <strong>{stats?.todayScheduled ?? '–'}</strong> Scheduled
             </div>
             <div className="stat-sub">
               <TrendUp size={11} weight="bold" />
-              <span>3 more than yesterday</span>
+              <span>across all operatories</span>
             </div>
           </div>
         </div>
@@ -100,11 +90,13 @@ const MainDashboard = () => {
           <div className="stat-body">
             <div className="stat-title">New Patients</div>
             <div className="stat-value">
-              <strong>14</strong> This Week
+              <strong>{stats?.newPatientsWeek ?? '–'}</strong> This Week
             </div>
             <div className="stat-sub">
               <TrendUp size={11} weight="bold" />
-              <span>+6 vs last week</span>
+              <span>
+                {stats === null ? '' : showNewDelta ? `+${newPatientsDelta}` : `${newPatientsDelta}`} vs last week
+              </span>
             </div>
           </div>
         </div>
@@ -116,11 +108,11 @@ const MainDashboard = () => {
           <div className="stat-body">
             <div className="stat-title">Monthly Revenue</div>
             <div className="stat-value">
-              <strong>$48,290</strong>
+              <strong>{stats ? currencyWhole(stats.monthlyRevenue) : '–'}</strong>
             </div>
             <div className="stat-sub">
               <TrendUp size={11} weight="bold" />
-              <span>+8.4% MoM</span>
+              <span>{stats ? `+${stats.revenuePct}% MoM` : ''}</span>
             </div>
           </div>
         </div>
@@ -131,28 +123,32 @@ const MainDashboard = () => {
           <div className="panel-head">
             <div className="panel-head-text">
               <h2>Today's Schedule</h2>
-              <p>May 26, 2026 · 9 appointments</p>
+              <p>{stats?.todayAppointments ?? 0} appointments today</p>
             </div>
-            <button type="button" className="panel-link">
+            <button type="button" className="panel-link" onClick={() => onNavigate('appointments')}>
               <Calendar size={11} weight="bold" />
               Full Calendar
             </button>
           </div>
 
-          <ul className="schedule-list">
-            {SCHEDULE.map((row, index) => (
-              <li key={index} className="schedule-row">
-                <div className="schedule-time">{row.time}</div>
-                <div className="schedule-patient">
-                  <div className="schedule-name">{row.patient}</div>
-                  <div className="schedule-detail">{row.detail}</div>
-                </div>
-                <span className={`status-pill ${STATUS[row.status].className}`}>
-                  {STATUS[row.status].label}
-                </span>
-              </li>
-            ))}
-          </ul>
+          {data?.schedule.length ? (
+            <ul className="schedule-list">
+              {data.schedule.map((row) => (
+                <li key={row.id} className="schedule-row">
+                  <div className="schedule-time">{row.time}</div>
+                  <div className="schedule-patient">
+                    <div className="schedule-name">{row.patient}</div>
+                    <div className="schedule-detail">{row.detail}</div>
+                  </div>
+                  <span className={`status-pill ${STATUS[row.tone as StatusTone] ?? 'pill-slate'}`}>
+                    {row.status}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="schedule-empty">{data ? 'No appointments scheduled for today.' : 'Loading…'}</p>
+          )}
         </section>
 
         <aside className="dashboard-right">
@@ -160,19 +156,19 @@ const MainDashboard = () => {
             <h2 className="panel-title">Quick Actions</h2>
             <div className="quick-actions">
               <div className="quick-action">
-                <button type="button" className="quick-action-btn">
+                <button type="button" className="quick-action-btn" onClick={() => onNavigate('appointments')}>
                   <CalendarPlus size={15} weight="bold" color="#2563eb" />
                 </button>
                 <span>New Appt</span>
               </div>
               <div className="quick-action">
-                <button type="button" className="quick-action-btn">
+                <button type="button" className="quick-action-btn" onClick={() => onNavigate('patients')}>
                   <UserPlus size={15} weight="bold" color="#2563eb" />
                 </button>
                 <span>Add Patient</span>
               </div>
               <div className="quick-action">
-                <button type="button" className="quick-action-btn">
+                <button type="button" className="quick-action-btn" onClick={() => onNavigate('billing')}>
                   <Receipt size={15} weight="bold" color="#2563eb" />
                 </button>
                 <span>Invoice</span>
@@ -182,20 +178,43 @@ const MainDashboard = () => {
 
           <section className="panel activity-panel">
             <h2 className="panel-title">Recent Activity</h2>
-            <ul className="activity-list">
-              {ACTIVITY.map((item, index) => (
-                <li key={index} className="activity-item">
-                  <span className={`activity-icon ${item.tone}`}>{item.icon}</span>
-                  <div className="activity-body">
-                    <div className="activity-text">{item.text}</div>
-                    <div className="activity-time">{item.time}</div>
-                  </div>
-                </li>
-              ))}
-            </ul>
+            {data?.activity.length ? (
+              <ul className="activity-list">
+                {data.activity.map((item, index) => (
+                  <li key={index} className="activity-item">
+                    <span className={`activity-icon ${item.tone}`}>
+                      {ACTIVITY_ICONS[item.icon] ?? <Check size={13} weight="bold" />}
+                    </span>
+                    <div className="activity-body">
+                      <div className="activity-text">{item.text}</div>
+                      <div className="activity-time">{item.timeAgo}</div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="activity-empty">{data ? 'No recent activity.' : 'Loading…'}</p>
+            )}
           </section>
         </aside>
       </div>
+
+      {revenueTrend.length > 0 && (
+        <section className="panel trend-panel">
+          <div className="panel-head">
+            <div className="panel-head-text">
+              <h2>Revenue Trend</h2>
+              <p>Billed vs. collected, last 6 months</p>
+            </div>
+          </div>
+          <TrendChart
+            data={revenueTrend}
+            height={200}
+            formatValue={(v) => currencyWhole(v)}
+            ariaLabel="Revenue trend, billed versus collected"
+          />
+        </section>
+      )}
     </div>
   )
 }
