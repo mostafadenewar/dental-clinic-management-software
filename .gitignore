@@ -1,2 +1,31 @@
-node_modules
-.git
+# Dependencies
+node_modules/
+.venv/
+
+# Build output
+dist/
+dist-electron/
+release/
+
+# Python cache and local data
+__pycache__/
+*.py[cod]
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment and local configuration
+.env
+.env.*
+!.env.example
+
+# Logs and coverage
+*.log
+coverage/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# Git internals
+.git/
