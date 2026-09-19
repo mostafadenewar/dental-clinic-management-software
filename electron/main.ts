@@ -1,6 +1,11 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, ipcMain } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+
+// NVIDIA's capture overlay can leave Chromium's accelerated surface in a
+// degraded state after recording stops. Software compositing avoids that
+// compositor handoff and keeps resizing and repainting consistent.
+app.disableHardwareAcceleration()
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -24,12 +29,31 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 
 
 let win: BrowserWindow | null
 
+const SCREEN_WIDTH = 1920
+const SCREEN_HEIGHT = 1080
+const MIN_WINDOW_WIDTH = 1500
+const MIN_WINDOW_HEIGHT = 1050
+
 function createWindow() {
   win = new BrowserWindow({
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT,
+    minWidth: MIN_WINDOW_WIDTH,
+    minHeight: MIN_WINDOW_HEIGHT,
+    frame: false,
+    show: false,
+    backgroundColor: '#f8fafc',
     icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
     webPreferences: {
+      backgroundThrottling: false,
+      nodeIntegration: false,
+      contextIsolation: true,
       preload: path.join(__dirname, 'preload.mjs'),
     },
+  })
+
+  win.once('ready-to-show', () => {
+    win?.show()
   })
 
   // Test active push message to Renderer-process.
@@ -44,6 +68,22 @@ function createWindow() {
     win.loadFile(path.join(RENDERER_DIST, 'index.html'))
   }
 }
+
+ipcMain.on('window-minimize', () => {
+  win?.minimize()
+})
+
+ipcMain.on('window-toggle-maximize', () => {
+  if (win?.isMaximized()) {
+    win.unmaximize()
+  } else {
+    win?.maximize()
+  }
+})
+
+ipcMain.on('window-close', () => {
+  win?.close()
+})
 
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits
