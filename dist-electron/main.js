@@ -8,10 +8,17 @@ const MAIN_DIST = path.join(process.env.APP_ROOT, "dist-electron");
 const RENDERER_DIST = path.join(process.env.APP_ROOT, "dist");
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, "public") : RENDERER_DIST;
 let win;
+const SCREEN_WIDTH = 1920;
+const SCREEN_HEIGHT = 1080;
 function createWindow() {
   win = new BrowserWindow({
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT,
     icon: path.join(process.env.VITE_PUBLIC, "electron-vite.svg"),
     webPreferences: {
+      zoomFactor: 1.25,
+      nodeIntegration: false,
+      contextIsolation: true,
       preload: path.join(__dirname$1, "preload.mjs")
     }
   });
