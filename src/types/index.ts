@@ -36,6 +36,7 @@ export type TreatmentCategory =
   | 'Prosthodontics'
   | 'Orthodontics'
   | 'Cosmetic'
+  | 'General'
 
 export interface ToothSelection {
   numbering: ToothNumbering
@@ -119,10 +120,65 @@ export interface TreatmentPlan {
   doctorId: string
   coordinatorId: string
   insuranceId: string
+  chiefComplaint: string
+  diagnosis: string
+  templateId: string | null
+  requestedDate: string | null
+  approvedDate: string | null
   createdAt: string
   updatedAt: string
   phases: TreatmentPhase[]
   careTasks?: CareTask[]
+}
+
+export interface TreatmentTemplate {
+  id: string
+  title: string
+  description: string
+  phaseNames: string[]
+  procedureCodes: string[]
+  createdAt: string
+}
+
+export interface EstimateProcedure {
+  id: string
+  code: string
+  fee: number
+  insuranceEstimate: number
+  patientResponsibility: number
+  coveragePct: number
+  deductibleApplied: number
+  flags: string[]
+}
+
+export interface BenefitBalances {
+  annualMaximum: number
+  usedThisYear: number
+  annualRemaining: number
+  deductible: number
+  deductibleUsed: number
+  deductibleRemaining: number
+}
+
+export interface ValidationMessage {
+  severity: 'info' | 'warn' | 'error'
+  message: string
+}
+
+export interface PaymentPlanRow {
+  month: number
+  amount: number
+}
+
+export interface PlanEstimate {
+  planId: string
+  insuranceId: string
+  patientId: string
+  procedures: EstimateProcedure[]
+  totals: { fee: number; insurance: number; patient: number }
+  benefits: BenefitBalances
+  validations: ValidationMessage[]
+  paymentPlans: { months6: PaymentPlanRow[]; months12: PaymentPlanRow[]; months18: PaymentPlanRow[] }
 }
 
 export interface PlanFinancials {
@@ -138,6 +194,103 @@ export interface PlanFinancials {
 export type InvoiceStatus = 'paid' | 'unpaid' | 'partial' | 'overdue'
 export type PaymentMethod = 'cash' | 'card' | 'check' | 'insurance' | 'other'
 export type ClaimStatus = 'pending' | 'processing' | 'submitted' | 'approved' | 'denied'
+
+// ---------------------------------------------------------------------------
+// Treatment workbench + practice billing (current model)
+// ---------------------------------------------------------------------------
+
+export interface InsurancePlan {
+  id: string
+  provider: string
+  policyNumber: string
+  notes: string
+}
+
+export type TreatmentStatus = 'planned' | 'done'
+
+export interface ProcedurePaymentRecord {
+  id: string
+  amountPaid: number
+  insuranceAmount: number
+  method: PaymentMethod
+  date: string
+  reference: string
+}
+
+export interface TreatmentRecord {
+  id: string
+  patient: PatientSummary
+  insuranceProvider: string
+  planId: string | null
+  planName: string
+  procedureName: string
+  code: string
+  category: TreatmentCategory
+  teeth: Array<number | string>
+  providerId: string
+  status: TreatmentStatus
+  doneDate: string | null
+  fee: number
+  amountPaid: number
+  insuranceAmount: number
+  notes: string
+  applied: number
+  balance: number
+  payments: ProcedurePaymentRecord[]
+}
+
+export interface PlanGroup {
+  id: string
+  patient: PatientSummary
+  name: string
+  notes: string
+  procedureCount: number
+  createdAt: string
+}
+
+export type ExpenseCategory =
+  | 'Wages'
+  | 'Laboratory'
+  | 'Materials'
+  | 'Rent & Utilities'
+  | 'Equipment'
+  | 'Taxes'
+  | 'Marketing'
+  | 'Other'
+
+export interface ExpenseRecord {
+  id: string
+  category: ExpenseCategory
+  description: string
+  amount: number
+  date: string
+  paidTo: string
+  notes: string
+}
+
+export interface BillingPaymentRecord {
+  id: string
+  patient: PatientSummary
+  procedureName: string
+  procedureFee: number
+  amountPaid: number
+  insuranceAmount: number
+  method: PaymentMethod
+  date: string
+  reference: string
+}
+
+export interface BillingOverview {
+  patientCollected: number
+  insurancePortion: number
+  revenue: number
+  prevMonthRevenue: number
+  wagesExpenses: number
+  otherExpenses: number
+  expensesTotal: number
+  netProfit: number
+  outstandingTreatments: number
+}
 
 export interface InvoiceLineItem {
   id: string

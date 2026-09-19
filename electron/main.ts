@@ -54,7 +54,22 @@ function backendPath(): string {
 
 function startBackend() {
   const dir = backendPath()
-  const python = process.env.DCMS_PYTHON ?? 'python'
+  const pythonCandidates = [
+    process.env.DCMS_PYTHON,
+    path.join(
+      process.env.APP_ROOT,
+      '.venv',
+      process.platform === 'win32' ? 'Scripts\\python.exe' : 'bin/python',
+    ),
+    process.platform === 'win32' ? 'python.exe' : 'python3',
+    'python',
+  ].filter((candidate): candidate is string => Boolean(candidate))
+  const python = pythonCandidates.find((candidate) => (
+    candidate === 'python' ||
+    candidate === 'python.exe' ||
+    candidate === 'python3' ||
+    existsSync(candidate)
+  )) ?? pythonCandidates[pythonCandidates.length - 1]
   const dbPath = app.isPackaged
     ? path.join(app.getPath('userData'), 'data', 'dental_clinic.db')
     : path.join(dir, 'data', 'dental_clinic.db')

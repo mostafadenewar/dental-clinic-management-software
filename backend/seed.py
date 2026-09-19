@@ -27,10 +27,18 @@ COORDINATORS = [
     ("COR-02", "Luke Adams", "Insurance Coordinator", ""),
 ]
 
+# id, username, display name, role
+USERS = [
+    ("USR-001", "admin", "Clinic Admin", "admin"),
+    ("USR-002", "dr.smith", "Dr. Smith", "dentist"),
+    ("USR-003", "front", "Maya Gomez", "front_desk"),
+]
+
+# id, carrier, policy_number, notes  (insurance is optional, informational only)
 INSURANCE = [
-    ("INS-01", "Delta Dental Premier", "PPO 88123", "DEL-4471", 70, 2000, 1250, "verified", "requested", iso(-4)),
-    ("INS-02", "Cigna Dental 1000", "DHMO 22914", "CIG-9012", 50, 1000, 320, "verified", "approved", iso(-8)),
-    ("INS-03", "MetLife PDP", "MET-77310", "MTL-2234", 80, 1500, 900, "pending", "not_required", iso(-20)),
+    ("INS-01", "Delta Dental", "PPO-88123", "PPO plan"),
+    ("INS-02", "Cigna", "DHMO-22914", ""),
+    ("INS-03", "MetLife PDP", "MET-77310", ""),
 ]
 
 # id, name, phone, email, gender, dob, address, insurance_id, status, notes, created_at_offset
@@ -59,11 +67,12 @@ def seed_coordinators(conn: sqlite3.Connection) -> None:
     conn.executemany("INSERT OR IGNORE INTO coordinators VALUES (?,?,?,?)", COORDINATORS)
 
 
+def seed_users(conn: sqlite3.Connection) -> None:
+    conn.executemany("INSERT OR IGNORE INTO users VALUES (?,?,?,?,1)", USERS)
+
+
 def seed_insurance(conn: sqlite3.Connection) -> None:
-    conn.executemany(
-        "INSERT OR IGNORE INTO insurance VALUES (?,?,?,?,?,?,?,?,?,?)",
-        INSURANCE,
-    )
+    conn.executemany("INSERT OR IGNORE INTO insurance VALUES (?,?,?,?)", INSURANCE)
 
 
 def seed_patients(conn: sqlite3.Connection) -> None:
@@ -125,6 +134,7 @@ def seed_appointments(conn: sqlite3.Connection) -> None:
 def seed_all(conn: sqlite3.Connection) -> None:
     seed_providers(conn)
     seed_coordinators(conn)
+    seed_users(conn)
     seed_insurance(conn)
     seed_patients(conn)
     seed_appointments(conn)

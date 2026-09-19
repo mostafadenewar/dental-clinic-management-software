@@ -31,9 +31,11 @@ from views_patients import (
     create_patient, delete_patient, get_patient, list_patients, patient_history,
     update_patient,
 )
-from views_plans import (
-    create_plan, create_procedure, delete_procedure, get_plan, list_plans,
-    set_procedure_status, toggle_care_task, update_plan, update_procedure,
+from views_treatment import (
+    billing_overview, billing_payments, create_expense, create_patient_procedure,
+    create_plan_group, delete_expense, delete_patient_procedure, delete_plan_group,
+    list_expenses, list_plan_groups, list_patient_procedures,
+    record_patient_payment, update_patient_procedure,
 )
 
 CORS = {
@@ -103,6 +105,9 @@ class Handler(BaseHTTPRequestHandler):
         conn = connect()
         try:
             self._dispatch(conn, method, path, query, body)
+        except ValueError as exc:
+            conn.rollback()
+            self._send(400, {"error": str(exc)})
         except sqlite3.Error:
             conn.rollback()
             self._send(500, {"error": "database error"})
@@ -182,44 +187,56 @@ class Handler(BaseHTTPRequestHandler):
                 a = set_appointment_status(conn, seg[2], body.get("status", ""))
                 return ok(a) if a else self._send(404, {"error": "not found"})
 
-        if seg == ["api", "plans"]:
+        if seg == ["api", "treatments"]:
             if method == "GET":
-                status = (query.get("status") or ["all"])[0]
-                search = (query.get("search") or [None])[0]
-                return ok(list_plans(conn, status, search))
+                patient_id = (query.get("patientId") or [None])[0]
+                return ok(list_patient_procedures(conn, patient_id))
             if method == "POST":
-                return ok(create_plan(conn, body), 201)
+                return ok(create_patient_procedure(conn, body), 201)
 
-        if len(seg) == 3 and seg[0] == "api" and seg[1] == "plans":
-            plan_id = seg[2]
-            if method == "GET":
-                p = get_plan(conn, plan_id)
-                return ok(p) if p else self._send(404, {"error": "not found"})
+        if len(seg) == 3 and seg[0] == "api" and seg[1] == "treatments":
             if method in ("PATCH", "PUT"):
-                p = update_plan(conn, plan_id, body)
-                return ok(p) if p else self._send(404, {"error": "not found"})
-
-        if len(seg) == 4 and seg[0] == "api" and seg[1] == "plans" and seg[3] == "procedures":
-            if method == "POST":
-                p = create_procedure(conn, seg[2], body)
-                return ok(p) if p else self._send(404, {"error": "not found"})
-
-        if len(seg) == 5 and seg[0] == "api" and seg[1] == "plans" and seg[3] == "tasks":
-            if method in ("PATCH", "PUT", "POST"):
-                p = toggle_care_task(conn, seg[4])
-                return ok(p) if p else self._send(404, {"error": "not found"})
-
-        if len(seg) == 4 and seg[0] == "api" and seg[1] == "procedures" and seg[3] == "status":
-            if method in ("PATCH", "PUT", "POST"):
-                p = set_procedure_status(conn, seg[2], body.get("status", ""))
-                return ok(p) if p else self._send(404, {"error": "not found"})
-
-        if len(seg) == 3 and seg[0] == "api" and seg[1] == "procedures":
-            if method in ("PATCH", "PUT"):
-                p = update_procedure(conn, seg[2], body)
+                p = update_patient_procedure(conn, seg[2], body)
                 return ok(p) if p else self._send(404, {"error": "not found"})
             if method == "DELETE":
-                if delete_procedure(conn, seg[2]):
+                if delete_patient_procedure(conn, seg[2]):
+                    return ok()
+                return self._send(404, {"error": "not found"})
+
+        if len(seg) == 4 and seg[0] == "api" and seg[1] == "treatments" and seg[3] == "payments":
+            if method == "POST":
+                p = record_patient_payment(conn, seg[2], body)
+                return ok(p) if p else self._send(404, {"error": "not found"})
+
+        if seg == ["api", "plan-groups"]:
+            if method == "GET":
+                return ok(list_plan_groups(conn))
+            if method == "POST":
+                return ok(create_plan_group(conn, body), 201)
+
+        if len(seg) == 3 and seg[0] == "api" and seg[1] == "plan-groups":
+            if method == "DELETE":
+                if delete_plan_group(conn, seg[2]):
+                    return ok()
+                return self._send(404, {"error": "not found"})
+
+        if seg == ["api", "billing", "overview"] and method == "GET":
+            return ok(billing_overview(conn))
+
+        if seg == ["api", "billing", "payments"] and method == "GET":
+            patient_id = (query.get("patientId") or [None])[0]
+            return ok(billing_payments(conn, patient_id))
+
+        if seg == ["api", "expenses"]:
+            if method == "GET":
+                month = (query.get("month") or [None])[0]
+                return ok(list_expenses(conn, month))
+            if method == "POST":
+                return ok(create_expense(conn, body), 201)
+
+        if len(seg) == 3 and seg[0] == "api" and seg[1] == "expenses":
+            if method == "DELETE":
+                if delete_expense(conn, seg[2]):
                     return ok()
                 return self._send(404, {"error": "not found"})
 
@@ -297,21 +314,21 @@ class Handler(BaseHTTPRequestHandler):
 
         if seg == ["api", "insurance"] and method == "GET":
             rows = conn.execute("SELECT * FROM insurance").fetchall()
-            return ok([{"id": r["id"], "provider": r["provider"], "coveragePercent": r["coverage_percent"],
-                        "annualMaximum": r["annual_maximum"], "eligibilityStatus": r["eligibility_status"]}
-                       for r in rows])
+            return ok([{"id": r["id"], "provider": r["provider"], "policyNumber": r["policy_number"],
+                        "notes": r["notes"] or ""} for r in rows])
 
         self._send(404, {"error": "not found"})
 
 
 def run(port: int) -> None:
     init_db()
-    if not is_seeded():
-        conn = connect()
-        try:
+    conn = connect()
+    try:
+        if not is_seeded():
             seed_all(conn)
-        finally:
-            conn.close()
+        conn.commit()
+    finally:
+        conn.close()
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     actual_port = server.server_address[1]
     print(f"DCMS_BACKEND_PORT={actual_port}", flush=True)

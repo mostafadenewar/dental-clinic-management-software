@@ -2,15 +2,19 @@ import { useEffect, useState } from 'react'
 import type {
   CareProvider,
   ClaimStatus,
-  InsuranceBenefit,
   InventoryItem,
   Invoice,
   InvoiceTotals,
+  InsurancePlan,
   PatientSummary,
   StorageLocation,
   SupplierOrder,
   TreatmentCategory,
-  TreatmentPlan,
+  TreatmentRecord,
+  PlanGroup,
+  BillingOverview,
+  BillingPaymentRecord,
+  ExpenseRecord,
 } from '../types'
 
 // ---------------------------------------------------------------------------
@@ -21,7 +25,10 @@ import type {
 // ---------------------------------------------------------------------------
 
 let baseUrl = (window as { __DCMS_API__?: string }).__DCMS_API__ ?? 'http://127.0.0.1:8419'
-let backendReady = false
+const hasElectronBackendBridge = Boolean(
+  (window as { dcms?: { onBackendUrl?: unknown } }).dcms?.onBackendUrl,
+)
+let backendReady = !hasElectronBackendBridge
 
 const readyListeners = new Set<() => void>()
 
@@ -194,26 +201,16 @@ const toProvider = (r: { id: string; fullName: string; role: string; title: stri
   title: r.title,
 })
 
-const toInsurance = (r: {
+const toInsurancePlan = (r: {
   id: string
   provider: string
-  coveragePercent: number
-  annualMaximum: number
-  eligibilityStatus: string
-}): InsuranceBenefit => ({
+  policyNumber: string
+  notes: string
+}): InsurancePlan => ({
   id: r.id,
   provider: r.provider,
-  policyNumber: '',
-  groupNumber: '',
-  coveragePercent: r.coveragePercent,
-  annualMaximum: r.annualMaximum,
-  usedThisYear: 0,
-  eligibilityStatus:
-    r.eligibilityStatus === 'verified' || r.eligibilityStatus === 'pending'
-      ? r.eligibilityStatus
-      : 'not_verified',
-  preAuthStatus: 'not_required',
-  lastVerified: null,
+  policyNumber: r.policyNumber ?? '',
+  notes: r.notes ?? '',
 })
 
 const toInvoice = (r: {
@@ -337,25 +334,32 @@ export const api = {
     apiFetch<AppointmentRecord>('PATCH', `/api/appointments/${encodeURIComponent(id)}/status`, { status }),
   deleteAppointment: (id: string) => apiFetch<{ ok: true }>('DELETE', `/api/appointments/${encodeURIComponent(id)}`),
 
-  plans: (status = 'all', search?: string) => {
-    const q = new URLSearchParams()
-    q.set('status', status)
-    if (search) q.set('search', search)
-    return apiFetch<TreatmentPlan[]>('GET', `/api/plans?${q.toString()}`)
+  treatments: (patientId?: string) => {
+    const q = patientId ? `?patientId=${encodeURIComponent(patientId)}` : ''
+    return apiFetch<TreatmentRecord[]>('GET', `/api/treatments${q}`)
   },
-  plan: (id: string) => apiFetch<TreatmentPlan>('GET', `/api/plans/${encodeURIComponent(id)}`),
-  createPlan: (data: object) => apiFetch<TreatmentPlan>('POST', '/api/plans', data),
-  updatePlan: (id: string, data: object) =>
-    apiFetch<TreatmentPlan>('PATCH', `/api/plans/${encodeURIComponent(id)}`, data),
-  createProcedure: (planId: string, data: object) =>
-    apiFetch<TreatmentPlan>('POST', `/api/plans/${encodeURIComponent(planId)}/procedures`, data),
-  updateProcedure: (id: string, data: object) =>
-    apiFetch<TreatmentPlan>('PATCH', `/api/procedures/${encodeURIComponent(id)}`, data),
-  deleteProcedure: (id: string) => apiFetch<{ ok: true }>('DELETE', `/api/procedures/${encodeURIComponent(id)}`),
-  setProcedureStatus: (id: string, status: string) =>
-    apiFetch<TreatmentPlan>('PATCH', `/api/procedures/${encodeURIComponent(id)}/status`, { status }),
-  toggleCareTask: (taskId: string) =>
-    apiFetch<TreatmentPlan>('PATCH', `/api/plans/tasks/${encodeURIComponent(taskId)}`),
+  createTreatment: (data: object) => apiFetch<TreatmentRecord>('POST', '/api/treatments', data),
+  updateTreatment: (id: string, data: object) =>
+    apiFetch<TreatmentRecord>('PATCH', `/api/treatments/${encodeURIComponent(id)}`, data),
+  deleteTreatment: (id: string) => apiFetch<{ ok: true }>('DELETE', `/api/treatments/${encodeURIComponent(id)}`),
+  recordTreatmentPayment: (id: string, data: object) =>
+    apiFetch<TreatmentRecord>('POST', `/api/treatments/${encodeURIComponent(id)}/payments`, data),
+
+  planGroups: () => apiFetch<PlanGroup[]>('GET', '/api/plan-groups'),
+  createPlanGroup: (data: object) => apiFetch<PlanGroup>('POST', '/api/plan-groups', data),
+  deletePlanGroup: (id: string) => apiFetch<{ ok: true }>('DELETE', `/api/plan-groups/${encodeURIComponent(id)}`),
+
+  billingOverview: () => apiFetch<BillingOverview>('GET', '/api/billing/overview'),
+  billingPayments: (patientId?: string) => {
+    const q = patientId ? `?patientId=${encodeURIComponent(patientId)}` : ''
+    return apiFetch<BillingPaymentRecord[]>('GET', `/api/billing/payments${q}`)
+  },
+  expenses: (month?: string) => {
+    const q = month ? `?month=${encodeURIComponent(month)}` : ''
+    return apiFetch<ExpenseRecord[]>('GET', `/api/expenses${q}`)
+  },
+  createExpense: (data: object) => apiFetch<ExpenseRecord>('POST', '/api/expenses', data),
+  deleteExpense: (id: string) => apiFetch<{ ok: true }>('DELETE', `/api/expenses/${encodeURIComponent(id)}`),
 
   invoices: () => apiFetch<Array<Invoice & { totals: InvoiceTotals }>>('GET', '/api/invoices'),
   createInvoice: (data: object) =>
@@ -404,10 +408,9 @@ export const api = {
     apiFetch<Array<{
       id: string
       provider: string
-      coveragePercent: number
-      annualMaximum: number
-      eligibilityStatus: string
-    }>>('GET', '/api/insurance').then((rows) => rows.map(toInsurance)),
+      policyNumber: string
+      notes: string
+    }>>('GET', '/api/insurance').then((rows) => rows.map(toInsurancePlan)),
 
   mapInvoice: toInvoice,
 }

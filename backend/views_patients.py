@@ -27,8 +27,8 @@ def _clinical_status(active_plan, outstanding, overdue, last_visit, active):
 def _compose(conn: sqlite3.Connection, p: dict) -> dict:
     pid = p["id"]
     active_plan = conn.execute(
-        "SELECT 1 FROM treatment_plans WHERE patient_id = ? "
-        "AND status IN ('pending_approval','approved','scheduled','in_progress') LIMIT 1",
+        "SELECT 1 FROM treatment_procedures WHERE patient_id = ? "
+        "AND status = 'planned' LIMIT 1",
         (pid,),
     ).fetchone()
     last = conn.execute(

@@ -27,13 +27,6 @@ def _compose_invoice(conn: sqlite3.Connection, r: dict) -> dict:
     } for p in rows_dicts(conn.execute(
         "SELECT * FROM payments WHERE invoice_id = ? ORDER BY date", (inv_id,)
     ).fetchall())]
-    c = conn.execute("SELECT * FROM insurance_claims WHERE invoice_id = ?",
-                     (inv_id,)).fetchone()
-    claim = None
-    if c:
-        claim = {"id": c["id"], "invoiceId": inv_id, "payer": c["payer"],
-                 "amount": c["amount"], "status": c["status"],
-                 "filedDate": c["filed_date"]}
     return {
         "id": inv_id,
         "number": r["number"],
@@ -42,7 +35,7 @@ def _compose_invoice(conn: sqlite3.Connection, r: dict) -> dict:
         "dueDate": r["due_date"],
         "lineItems": lines,
         "payments": payments,
-        "claim": claim,
+        "claim": None,
         "notes": r["notes"] or "",
         "totals": invoice_totals(conn, inv_id),
     }
@@ -151,11 +144,6 @@ def billing_summary(conn: sqlite3.Connection) -> dict:
             aging[idx] += i["totals"]["balance"]
     aging = [round(x, 2) for x in aging]
 
-    claims = []
-    for i in invoices:
-        if i["claim"] and i["claim"]["status"] not in ("approved", "paid"):
-            claims.append(i["claim"])
-
     trend = []
     for off in range(-5, 1):
         s = first_of(off)
@@ -175,7 +163,7 @@ def billing_summary(conn: sqlite3.Connection) -> dict:
         "prevMonthRevenue": prev_rev,
         "outstandingAmount": round(sum(i["totals"]["balance"] for i in outstanding), 2),
         "outstandingCount": len(outstanding),
-        "activeClaims": claims,
+        "activeClaims": [],
         "aging": aging,
         "revenueTrend": trend,
     }

@@ -1,12 +1,12 @@
 import { createContext, useContext } from 'react'
-import type { CareProvider, InsuranceBenefit, StorageLocation } from '../types'
+import type { CareProvider, InsurancePlan, StorageLocation } from '../types'
 import type { PatientRecord, ProcedureCatalogEntry } from './client'
 
 export interface Lookups {
   patients: PatientRecord[]
   providers: CareProvider[]
   coordinators: CareProvider[]
-  insurance: InsuranceBenefit[]
+  insurance: InsurancePlan[]
   catalog: ProcedureCatalogEntry[]
   locations: StorageLocation[]
   refreshing: boolean
