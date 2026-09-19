@@ -28,7 +28,8 @@ from views_inventory import (
     update_item,
 )
 from views_patients import (
-    create_patient, delete_patient, get_patient, list_patients, update_patient,
+    create_patient, delete_patient, get_patient, list_patients, patient_history,
+    update_patient,
 )
 from views_plans import (
     create_plan, create_procedure, delete_procedure, get_plan, list_plans,
@@ -134,6 +135,13 @@ class Handler(BaseHTTPRequestHandler):
                 return ok(list_patients(conn))
             if method == "POST":
                 return ok(create_patient(conn, body), 201)
+
+        if len(seg) == 4 and seg[0] == "api" and seg[1] in ("pat", "patients") and seg[3] == "history":
+            if method == "GET":
+                p = get_patient(conn, seg[2])
+                if p is None:
+                    return self._send(404, {"error": "not found"})
+                return ok(patient_history(conn, seg[2]))
 
         if len(seg) == 3 and seg[0] == "api" and seg[1] in ("pat", "patients"):
             pid = seg[2]

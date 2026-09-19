@@ -44,6 +44,13 @@
   gap: 8px;
 }
 
+.tool-group {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .tool-btn {
   border: none;
   background: transparent;
@@ -60,8 +67,49 @@
   color: #2563eb;
 }
 
-.tool-fill {
+.tool-active {
+  color: #2563eb;
+  background-color: #eff6ff;
+}
+
+.filter-menu {
+  position: absolute;
+  top: 30px;
+  left: 0;
+  z-index: 60;
+  min-width: 168px;
+  background: #ffffff;
+  border: 1px solid #eef2f7;
+  border-radius: 10px;
+  box-shadow: 0 12px 28px -12px rgba(15, 23, 42, 0.28);
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+}
+
+.filter-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: none;
+  background: transparent;
+  font-size: 10.5px;
   color: #475569;
+  padding: 7px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+
+.filter-option:hover {
+  background-color: #f8fafc;
+}
+
+.filter-option.active {
+  color: #2563eb;
+  font-weight: 500;
 }
 
 .table-card {
@@ -113,6 +161,11 @@
   padding: 9px 0;
   border-top: 1px solid #f1f5f9;
   align-items: center;
+  cursor: pointer;
+}
+
+.pat-row:hover {
+  background-color: #f8fafc;
 }
 
 .pat-name {
@@ -476,4 +529,264 @@
 
 .patient-detail .pf-btn:first-of-type {
   margin-right: auto;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Grid view cards                                                          */
+/* ------------------------------------------------------------------------- */
+
+.pat-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(208px, 1fr));
+  gap: 14px;
+  padding: 16px;
+}
+
+.pat-card {
+  border: 1px solid #f1f5f9;
+  border-radius: 12px;
+  padding: 14px;
+  background: #ffffff;
+  cursor: pointer;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+
+.pat-card:hover {
+  border-color: #dbeafe;
+  box-shadow: 0 10px 20px -12px rgba(15, 23, 42, 0.22);
+}
+
+.pat-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.pat-card-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pat-card-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.pat-card-id {
+  font-size: 9.5px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+.pat-card-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+  border-top: 1px solid #f1f5f9;
+  padding-top: 10px;
+}
+
+.pat-card-rows > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pat-card-rows > div > span {
+  font-size: 9px;
+  color: #94a3b8;
+}
+
+.pat-card-rows > div > strong {
+  font-size: 10px;
+  color: #334155;
+  text-align: right;
+}
+
+.pat-card-overdue {
+  color: #dc2626;
+}
+
+.pat-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 12px;
+}
+
+.pat-card .row-action {
+  border: 1px solid transparent;
+  border-radius: 7px;
+}
+
+.pat-card .row-action:hover {
+  border-color: #dbeafe;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Patient detail history (visits + bills)                                  */
+/* ------------------------------------------------------------------------- */
+
+.pd-history {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.pd-history-block {
+  border: 1px solid #eef2f7;
+  border-radius: 10px;
+  padding: 12px;
+  min-width: 0;
+}
+
+.pd-history-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #1e293b;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 8px;
+}
+
+.pd-history-title svg {
+  color: #2563eb;
+}
+
+.ph-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ph-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    'main status'
+    'meta meta';
+  gap: 2px 8px;
+  align-items: center;
+  border-bottom: 1px solid #f8fafc;
+  padding-bottom: 6px;
+}
+
+.ph-item:last-child {
+  border-bottom: none;
+  padding-bottom: 2px;
+}
+
+.ph-date {
+  font-size: 9px;
+  color: #64748b;
+}
+
+.ph-time {
+  font-size: 9px;
+  font-weight: 500;
+  color: #334155;
+}
+
+.ph-main {
+  grid-area: main;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ph-meta {
+  grid-area: meta;
+  font-size: 8.5px;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ph-status {
+  grid-area: status;
+  font-size: 7.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: capitalize;
+  border-radius: 999px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+
+.ph-scheduled {
+  background-color: #eff6ff;
+  color: #2563eb;
+}
+
+.ph-confirmed {
+  background-color: #ecfdf5;
+  color: #059669;
+}
+
+.ph-completed {
+  background-color: #f5f3ff;
+  color: #7c3aed;
+}
+
+.ph-cancelled {
+  background-color: #fcf5e8;
+  color: #d97706;
+}
+
+.ph-noshow {
+  background-color: #fef2f2;
+  color: #dc2626;
+}
+
+.ph-paid {
+  background-color: #ecfdf5;
+  color: #059669;
+}
+
+.ph-unpaid {
+  background-color: #fcf5e8;
+  color: #d97706;
+}
+
+.ph-partial {
+  background-color: #eff6ff;
+  color: #2563eb;
+}
+
+.ph-overdue {
+  background-color: #fef2f2;
+  color: #dc2626;
+}
+
+.ph-amount {
+  font-size: 10px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.ph-empty {
+  margin: 4px 0;
+  font-size: 9.5px;
+  color: #94a3b8;
 }

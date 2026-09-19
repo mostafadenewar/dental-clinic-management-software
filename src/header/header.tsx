@@ -12,7 +12,7 @@ import './header.css'
 import type { PageKey } from '../App'
 
 const PAGE_META: Record<PageKey, { title: string; subtitle: string }> = {
-  dashboard: { title: 'Dashboard', subtitle: '· Monday, May 26' },
+  dashboard: { title: 'Dashboard', subtitle: new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) },
   patients: { title: 'Patients', subtitle: '· 1,284 total records' },
   appointments: { title: 'Appointments', subtitle: 'May 26 – June 01, 2026' },
   treatment: { title: 'Treatment Plans', subtitle: '· 12 active plans' },
@@ -48,7 +48,7 @@ const Header = ({ page, searchValue, onSearchChange, primaryAction }: HeaderProp
   }
 
   return (
-    <header className="header">
+    <header className={`header${page === 'dashboard' ? ' header-dashboard' : ''}`}>
       <div className="header-left">
         <h1>{meta.title}</h1>
         {page === 'appointments' ? (
@@ -74,33 +74,6 @@ const Header = ({ page, searchValue, onSearchChange, primaryAction }: HeaderProp
               onChange={handleSearchChange}
             />
           </div>
-        )}
-
-        {page === 'appointments' && (
-          <>
-            <div className="header-segment">
-              <button type="button" className="segment-option">
-                Day
-              </button>
-              <button type="button" className="segment-option active">
-                Week
-              </button>
-              <button type="button" className="segment-option">
-                Month
-              </button>
-            </div>
-            <button type="button" className="header-primary-btn">
-              <Plus size={14} weight="bold" />
-              Schedule
-            </button>
-          </>
-        )}
-
-        {page === 'patients' && (
-          <button type="button" className="header-primary-btn">
-            <Plus size={14} weight="bold" />
-            Add Patient
-          </button>
         )}
 
         {page === 'dashboard' && (

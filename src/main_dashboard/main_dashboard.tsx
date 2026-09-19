@@ -12,7 +12,6 @@ import {
   CurrencyCircleDollar,
 } from '@phosphor-icons/react'
 import { api, useBackendReady, type DashboardData } from '../api/client'
-import { TrendChart, type TrendPoint } from '../components/Charts'
 import { currencyWhole } from '../utils/format'
 import './main_dashboard.css'
 
@@ -36,9 +35,12 @@ const ACTIVITY_ICONS: Record<string, React.ReactNode> = {
 
 interface MainDashboardProps {
   onNavigate: (page: 'appointments' | 'patients' | 'billing') => void
+  searchQuery?: string
+  onOpenNewAppointment?: () => void
+  onOpenNewPatient?: () => void
 }
 
-const MainDashboard = ({ onNavigate }: MainDashboardProps) => {
+const MainDashboard = ({ onNavigate, searchQuery = '', onOpenNewAppointment, onOpenNewPatient }: MainDashboardProps) => {
   const ready = useBackendReady()
   const [data, setData] = useState<DashboardData | null>(null)
 
@@ -55,11 +57,12 @@ const MainDashboard = ({ onNavigate }: MainDashboardProps) => {
   }, [ready, load])
 
   const stats = data?.stats
-  const revenueTrend: TrendPoint[] =
-    data?.revenueTrend.map((p) => ({ label: p.month, value: p.revenue, secondary: p.collected })) ?? []
 
   const newPatientsDelta = (stats?.newPatientsWeek ?? 0) - (stats?.newPatientsPrevWeek ?? 0)
   const showNewDelta = stats ? newPatientsDelta >= 0 : false
+
+  const q = searchQuery.trim().toLowerCase()
+  const visibleSchedule = (data?.schedule ?? []).filter((row) => !q || row.patient.toLowerCase().includes(q))
 
   return (
     <div className="dashboard-page">
@@ -131,9 +134,9 @@ const MainDashboard = ({ onNavigate }: MainDashboardProps) => {
             </button>
           </div>
 
-          {data?.schedule.length ? (
+          {visibleSchedule.length ? (
             <ul className="schedule-list">
-              {data.schedule.map((row) => (
+              {visibleSchedule.map((row) => (
                 <li key={row.id} className="schedule-row">
                   <div className="schedule-time">{row.time}</div>
                   <div className="schedule-patient">
@@ -147,7 +150,9 @@ const MainDashboard = ({ onNavigate }: MainDashboardProps) => {
               ))}
             </ul>
           ) : (
-            <p className="schedule-empty">{data ? 'No appointments scheduled for today.' : 'Loading…'}</p>
+            <p className="schedule-empty">
+              {data ? (q ? 'No appointments match your search.' : 'No appointments scheduled for today.') : 'Loading…'}
+            </p>
           )}
         </section>
 
@@ -156,13 +161,13 @@ const MainDashboard = ({ onNavigate }: MainDashboardProps) => {
             <h2 className="panel-title">Quick Actions</h2>
             <div className="quick-actions">
               <div className="quick-action">
-                <button type="button" className="quick-action-btn" onClick={() => onNavigate('appointments')}>
+                <button type="button" className="quick-action-btn" onClick={onOpenNewAppointment}>
                   <CalendarPlus size={15} weight="bold" color="#2563eb" />
                 </button>
-                <span>New Appt</span>
+                <span>New Appointment</span>
               </div>
               <div className="quick-action">
-                <button type="button" className="quick-action-btn" onClick={() => onNavigate('patients')}>
+                <button type="button" className="quick-action-btn" onClick={onOpenNewPatient}>
                   <UserPlus size={15} weight="bold" color="#2563eb" />
                 </button>
                 <span>Add Patient</span>
@@ -198,23 +203,6 @@ const MainDashboard = ({ onNavigate }: MainDashboardProps) => {
           </section>
         </aside>
       </div>
-
-      {revenueTrend.length > 0 && (
-        <section className="panel trend-panel">
-          <div className="panel-head">
-            <div className="panel-head-text">
-              <h2>Revenue Trend</h2>
-              <p>Billed vs. collected, last 6 months</p>
-            </div>
-          </div>
-          <TrendChart
-            data={revenueTrend}
-            height={200}
-            formatValue={(v) => currencyWhole(v)}
-            ariaLabel="Revenue trend, billed versus collected"
-          />
-        </section>
-      )}
     </div>
   )
 }

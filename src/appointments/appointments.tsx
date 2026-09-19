@@ -1,31 +1,42 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { X, Sparkle, CaretLeft, CaretRight, CalendarBlank } from '@phosphor-icons/react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { X, Plus, CaretLeft, CaretRight, CalendarBlank } from '@phosphor-icons/react'
 import { api, useBackendReady, type AppointmentRecord } from '../api/client'
 import { useLookups } from '../api/lookups-context'
 import { Modal } from '../components/Modal'
+import { PatientCreateModal } from '../components/PatientCreateModal'
 import { useToast } from '../components/toastStore'
 import './appointments.css'
 
 const START_HOUR = 8
+const END_HOUR = 17
 const HOUR_PX = 60
+const DAY_START = START_HOUR * 60
+const HOURS = Array.from({ length: END_HOUR - START_HOUR + 1 }, (_, i) => START_HOUR + i)
 
-const HOURS = Array.from({ length: 10 }, (_, i) => {
-  const h = i === 0 ? 12 : i
-  const suffix = i < 9 ? 'AM' : 'PM'
-  return `${String(h).padStart(2, '0')}:00 ${suffix}`
-})
-
-const DAY_LETTERS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
 const BLOCK_STATUS: Record<string, string> = {
   confirmed: 'block-green',
   scheduled: 'block-blue',
   in_progress: 'block-violet',
-  completed: 'block-violet',
+  completed: 'block-slate',
   cancelled: 'block-amber',
-  no_show: 'block-amber',
+  no_show: 'block-red',
 }
 
-const ROOMS = ['Room 1', 'Room 2', 'Room 3']
+const DEFAULT_ROOMS = ['Room 1', 'Room 2', 'Room 3']
+
+const DEFAULT_TITLES = [
+  'Consultation',
+  'Routine Checkup',
+  'Teeth Cleaning',
+  'New Patient Exam',
+  'Filling',
+  'Extraction',
+  'Root Canal',
+  'Follow-up',
+  'Teeth Whitening',
+]
+
+const DURATIONS = [15, 30, 45, 60, 90, 120]
 
 const toIso = (d: Date): string => {
   const y = d.getFullYear()
@@ -40,15 +51,16 @@ const addDays = (d: Date, n: number): Date => {
   return copy
 }
 
-const mondayOf = (d: Date): Date => {
-  const copy = new Date(new Date(d).getFullYear(), d.getMonth(), d.getDate())
-  const dow = (copy.getDay() + 6) % 7
-  return addDays(copy, -dow)
-}
-
 const toMinutes = (hm: string): number => {
   const [h, m] = hm.split(':').map((x) => Number(x) || 0)
   return h * 60 + m
+}
+
+const addMinutes = (hm: string, minutes: number): string => {
+  const total = (toMinutes(hm) + minutes) % (24 * 60)
+  const h = Math.floor(total / 60)
+  const m = total % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
 
 const toDisplay = (hm: string): string => {
@@ -60,6 +72,12 @@ const toDisplay = (hm: string): string => {
   return `${twelve}:${String(mins).padStart(2, '0')} ${suffix}`
 }
 
+const hourLabel = (h: number): string => {
+  const suffix = h >= 12 ? 'PM' : 'AM'
+  const twelve = h % 12 === 0 ? 12 : h % 12
+  return `${twelve} ${suffix}`
+}
+
 interface AppointmentForm {
   patientId: string
   providerId: string
@@ -67,6 +85,7 @@ interface AppointmentForm {
   date: string
   startTime: string
   endTime: string
+  durationMinutes: number
   room: string
   notes: string
   status: string
@@ -79,22 +98,51 @@ const emptyForm = (date: string): AppointmentForm => ({
   date,
   startTime: '09:00',
   endTime: '09:30',
+  durationMinutes: 30,
   room: 'Room 1',
   notes: '',
   status: 'scheduled',
 })
 
-const fromAppt = (a: AppointmentRecord): AppointmentForm => ({
-  patientId: a.patientId,
-  providerId: a.providerId || 'DOC-01',
-  title: a.title,
-  date: a.date,
-  startTime: a.startTime,
-  endTime: a.endTime,
-  room: a.room,
-  notes: a.notes,
-  status: a.status,
-})
+const fromAppt = (a: AppointmentRecord): AppointmentForm => {
+  const start = toMinutes(a.startTime)
+  const end = Math.max(start + 15, toMinutes(a.endTime))
+  return {
+    patientId: a.patientId,
+    providerId: a.providerId || 'DOC-01',
+    title: a.title,
+    date: a.date,
+    startTime: a.startTime,
+    endTime: a.endTime,
+    durationMinutes: end - start,
+    room: a.room,
+    notes: a.notes,
+    status: a.status,
+  }
+}
+
+/** Assign side-by-side lanes to overlapping appointment blocks. */
+const layoutSlots = (slots: Array<{ start: number; end: number }>) => {
+  const sorted = [...slots].sort((a, b) => a.start - b.start || b.end - a.end)
+  const laneEnds: number[] = []
+  const lanesOf: number[] = []
+  for (const s of sorted) {
+    let lane = laneEnds.findIndex((end) => end <= s.start)
+    if (lane === -1) {
+      lane = laneEnds.length
+      laneEnds.push(0)
+    }
+    laneEnds[lane] = s.end
+    lanesOf.push(lane)
+  }
+  const lanes = Math.max(1, laneEnds.length)
+  const gap = 0.4
+  const width = (100 - gap * (lanes - 1)) / lanes
+  return sorted.map((_s, i) => ({
+    left: lanesOf[i] * (width + gap),
+    width: Math.max(0.5, width),
+  }))
+}
 
 interface AppointmentsProps {
   searchQuery: string
@@ -106,32 +154,29 @@ const Appointments = ({ searchQuery, createOpen, onCreateOpenChange }: Appointme
   const ready = useBackendReady()
   const { patients, providers } = useLookups()
   const toast = useToast()
-  const [weekStart, setWeekStart] = useState(() => mondayOf(new Date()))
+  const [selectedDate, setSelectedDate] = useState(() => toIso(new Date()))
   const [appointments, setAppointments] = useState<AppointmentRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState<AppointmentRecord | null>(null)
   const [draftDate, setDraftDate] = useState(() => toIso(new Date()))
   const [form, setForm] = useState<AppointmentForm>(() => emptyForm(toIso(new Date())))
   const [saving, setSaving] = useState(false)
-
-  const todayIso = useMemo(() => toIso(new Date()), [])
-  const weekDays = useMemo(
-    () => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)),
-    [weekStart],
-  )
+  const [titles, setTitles] = useState<string[]>(DEFAULT_TITLES)
+  const [addingTitle, setAddingTitle] = useState(false)
+  const [newTitle, setNewTitle] = useState('')
+  const [patientModalOpen, setPatientModalOpen] = useState(false)
+  const pendingRoomRef = useRef<string | null>(null)
 
   const load = useCallback(async () => {
-    const start = toIso(weekStart)
-    const end = toIso(addDays(weekStart, 6))
     setLoading(true)
     try {
-      setAppointments(await api.appointments(start, end))
+      setAppointments(await api.appointments(selectedDate, selectedDate))
     } catch {
       setAppointments([])
     } finally {
       setLoading(false)
     }
-  }, [weekStart])
+  }, [selectedDate])
 
   useEffect(() => {
     if (ready) void load()
@@ -139,39 +184,89 @@ const Appointments = ({ searchQuery, createOpen, onCreateOpenChange }: Appointme
 
   useEffect(() => {
     if (createOpen) {
-      setForm(editing ? fromAppt(editing) : emptyForm(draftDate))
+      const base = editing ? fromAppt(editing) : emptyForm(draftDate)
+      const room = pendingRoomRef.current
+      pendingRoomRef.current = null
+      setForm(room ? { ...base, room } : base)
+      setAddingTitle(false)
+      setNewTitle('')
+      setPatientModalOpen(false)
     }
   }, [createOpen, editing, draftDate])
 
-  const openCreateOn = (date: string) => {
+  const selectedDay = useMemo(() => {
+    const parts = selectedDate.split('-').map(Number)
+    return new Date(parts[0], parts[1] - 1, parts[2])
+  }, [selectedDate])
+
+  const openCreateOn = (date: string, room?: string) => {
     setEditing(null)
     setDraftDate(date)
+    pendingRoomRef.current = room ?? null
     onCreateOpenChange(true)
   }
 
   const openEdit = (appt: AppointmentRecord) => {
     setEditing(appt)
     setDraftDate(appt.date)
+    setAddingTitle(false)
+    setPatientModalOpen(false)
     onCreateOpenChange(true)
   }
 
   const close = () => {
     onCreateOpenChange(false)
     setEditing(null)
+    setPatientModalOpen(false)
   }
+
+  const roomList = useMemo(() => {
+    const set = new Set(DEFAULT_ROOMS)
+    for (const a of appointments) {
+      if (a.room) set.add(a.room)
+    }
+    return Array.from(set)
+  }, [appointments])
+
+  const dayAppointments = useMemo(
+    () =>
+      [...appointments].sort((a, b) => {
+        const byTime = a.startTime.localeCompare(b.startTime)
+        return byTime || a.patientName.localeCompare(b.patientName)
+      }),
+    [appointments],
+  )
+
+  const agendaQuery = searchQuery.trim().toLowerCase()
+  const agendaAppointments = useMemo(
+    () => (agendaQuery ? dayAppointments.filter((a) => a.patientName.toLowerCase().includes(agendaQuery)) : dayAppointments),
+    [dayAppointments, agendaQuery],
+  )
+
+  const remainingLeft = dayAppointments.filter((a) => !['completed', 'cancelled', 'no_show'].includes(a.status)).length
+
+  const todayIso = toIso(new Date())
+  const nowMinutes =
+    selectedDate === todayIso ? new Date().getHours() * 60 + new Date().getMinutes() : null
+  const nowTop =
+    nowMinutes != null && nowMinutes >= DAY_START && nowMinutes <= END_HOUR * 60
+      ? ((nowMinutes - DAY_START) / 60) * HOUR_PX
+      : null
 
   const handleSave = async () => {
     if (!form.patientId) {
       toast.push('Select a patient for the appointment', { tone: 'warning' })
       return
     }
+    const duration = Number(form.durationMinutes) || 30
+    const payload = { ...form, endTime: addMinutes(form.startTime, duration) }
     setSaving(true)
     try {
       if (editing) {
-        await api.updateAppointment(editing.id, form)
+        await api.updateAppointment(editing.id, payload)
         toast.push(`${form.title} updated`)
       } else {
-        await api.createAppointment(form)
+        await api.createAppointment(payload)
         toast.push('Appointment scheduled')
       }
       close()
@@ -181,6 +276,15 @@ const Appointments = ({ searchQuery, createOpen, onCreateOpenChange }: Appointme
     } finally {
       setSaving(false)
     }
+  }
+
+  const addTitle = () => {
+    const value = newTitle.trim()
+    if (!value) return
+    setTitles((all) => (all.includes(value) ? all : [...all, value]))
+    setForm((f) => ({ ...f, title: value }))
+    setNewTitle('')
+    setAddingTitle(false)
   }
 
   const setStatus = async (appt: AppointmentRecord, status: string) => {
@@ -193,36 +297,11 @@ const Appointments = ({ searchQuery, createOpen, onCreateOpenChange }: Appointme
     }
   }
 
-  const byDay = useMemo(() => {
-    const map = new Map<string, AppointmentRecord[]>()
-    for (const w of weekDays) {
-      const iso = toIso(w)
-      map.set(iso, appointments.filter((a) => a.date === iso).sort((a, b) => a.startTime.localeCompare(b.startTime)))
-    }
-    return map
-  }, [appointments, weekDays])
-
-  const todayAppointments = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase()
-    const rows = appointments
-      .filter((a) => a.date === todayIso)
-      .sort((a, b) => a.startTime.localeCompare(b.startTime))
-    if (!q) return rows
-    return rows.filter((a) => a.patientName.toLowerCase().includes(q))
-  }, [appointments, todayIso, searchQuery])
-
-  const remainingToday = todayAppointments.filter((a) => !['completed', 'cancelled', 'no_show'].includes(a.status)).length
-
   const formField = (key: keyof AppointmentForm) => ({
     value: form[key],
     onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
       setForm((f) => ({ ...f, [key]: e.target.value })),
   })
-
-  const weekContainsToday = todayIso >= toIso(weekStart) && todayIso <= toIso(addDays(weekStart, 6))
-  const now = new Date()
-  const nowMinutes = now.getHours() * 60 + now.getMinutes()
-  const nowIso = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
 
   return (
     <div className="appt-page">
@@ -230,114 +309,138 @@ const Appointments = ({ searchQuery, createOpen, onCreateOpenChange }: Appointme
         <section className="appt-calendar">
           <div className="appt-toolbar">
             <div className="appt-week-nav">
-              <button type="button" className="week-btn" onClick={() => setWeekStart(addDays(weekStart, -7))}>
-                <CaretLeft size={12} weight="bold" />
+              <button type="button" className="week-btn" onClick={() => setSelectedDate(toIso(addDays(selectedDay, -1)))} title="Previous day">
+                <CaretLeft size={13} weight="bold" />
               </button>
-              <button
-                type="button"
-                className="week-btn"
-                onClick={() => setWeekStart(mondayOf(new Date()))}
-                title="This week"
-              >
+              <button type="button" className="week-btn today-btn" onClick={() => setSelectedDate(toIso(new Date()))} title="Jump to today">
                 Today
               </button>
-              <button type="button" className="week-btn" onClick={() => setWeekStart(addDays(weekStart, 7))}>
-                <CaretRight size={12} weight="bold" />
+              <button type="button" className="week-btn" onClick={() => setSelectedDate(toIso(addDays(selectedDay, 1)))} title="Next day">
+                <CaretRight size={13} weight="bold" />
               </button>
             </div>
-            <div className="appt-week-label">
-              <CalendarBlank size={12} weight="bold" />
-              {`${weekDays[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${weekDays[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`}
+            <label className="appt-date-chip">
+              <CalendarBlank size={14} weight="bold" />
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => {
+                  if (e.target.value) setSelectedDate(e.target.value)
+                }}
+              />
+            </label>
+            <div className="appt-toolbar-summary">
+              <span className="appt-sum-count">{dayAppointments.length}</span> appointment
+              {dayAppointments.length === 1 ? '' : 's'}
+              <i className="appt-sum-dot" />
+              {roomList.length} room{roomList.length === 1 ? '' : 's'}
             </div>
           </div>
 
-          <div className="appt-strip">
-            <div className="appt-gutter-head" />
-            {weekDays.map((d, index) => (
-              <div key={index} className={`appt-day-head${toIso(d) === todayIso ? ' active' : ''}`}>
-                <span className="appt-day-name">{DAY_LETTERS[index]}</span>
-                <span className="appt-day-num">{d.getDate()}</span>
+          <div className="appt-schedule-wrap">
+            <div className="appt-room-gutter">
+              <div className="appt-room-gutter-head">
+                <span>Hours</span>
               </div>
-            ))}
-          </div>
-
-          <div className="appt-body">
-            <div className="appt-gutter">
-              {HOURS.map((h, index) => (
-                <div key={index} className="appt-hour">
-                  <span>{h}</span>
-                </div>
-              ))}
+              <div className="appt-room-gutter-body" style={{ height: HOURS.length * HOUR_PX }}>
+                {HOURS.map((h) => (
+                  <div key={h} className="appt-hour">
+                    <span>{hourLabel(h)}</span>
+                  </div>
+                ))}
+                {nowTop != null && (
+                  <div className="appt-now-line" style={{ top: nowTop }}>
+                    <span className="appt-now-dot" />
+                    <span className="appt-now-time">{toDisplay(new Date().toTimeString().slice(0, 5))}</span>
+                  </div>
+                )}
+              </div>
             </div>
 
-            {weekDays.map((d, index) => {
-              const iso = toIso(d)
-              const dayAppts = byDay.get(iso) ?? []
+            {roomList.map((room) => {
+              const roomAppts = dayAppointments.filter((a) => (a.room || 'Room 1') === room)
+              const positioned = layoutSlots(
+                roomAppts.map((a) => ({
+                  start: toMinutes(a.startTime),
+                  end: Math.max(toMinutes(a.startTime) + 15, toMinutes(a.endTime)),
+                })),
+              )
               return (
-                <div key={index} className="appt-day-col" onClick={() => openCreateOn(iso)}>
-                  {dayAppts.map((a) => {
-                    const startMin = toMinutes(a.startTime)
-                    const endMin = Math.max(startMin + 30, toMinutes(a.endTime))
-                    const top = ((startMin - START_HOUR * 60) / 60) * HOUR_PX
-                    const height = ((endMin - startMin) / 60) * HOUR_PX
-                    return (
-                      <div
-                        key={a.id}
-                        className={`appt-block ${BLOCK_STATUS[a.status] ?? 'block-blue'}`}
-                        style={{ top: Math.max(0, top), height: Math.max(26, height) }}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          openEdit(a)
-                        }}
-                        title={`${a.patientName} · ${toDisplay(a.startTime)} – ${toDisplay(a.endTime)}`}
-                      >
-                        <div className="appt-block-time">
-                          {toDisplay(a.startTime)} – {toDisplay(a.endTime)}
+                <div key={room} className="appt-room-col">
+                  <div className="appt-room-head" title={room}>
+                    <span className="appt-room-name">{room}</span>
+                    <span className="appt-room-count">
+                      {roomAppts.length} booked
+                    </span>
+                  </div>
+                  <div className="appt-room-body" style={{ height: HOURS.length * HOUR_PX }} onClick={() => openCreateOn(selectedDate, room)}>
+                    {roomAppts.map((a, index) => {
+                      const pos = positioned[index]
+                      const startMin = toMinutes(a.startTime)
+                      const endMin = Math.max(startMin + 15, toMinutes(a.endTime))
+                      const top = ((startMin - DAY_START) / 60) * HOUR_PX
+                      const height = ((endMin - startMin) / 60) * HOUR_PX
+                      return (
+                        <div
+                          key={a.id}
+                          className={`appt-block ${BLOCK_STATUS[a.status] ?? 'block-blue'}`}
+                          style={{ top: Math.max(0, top), height: Math.max(30, height - 2), left: `${pos.left}%`, width: `${pos.width}%` }}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            openEdit(a)
+                          }}
+                          title={`${a.patientName} · ${toDisplay(a.startTime)} – ${toDisplay(a.endTime)} · ${a.title}`}
+                        >
+                          <div className="appt-block-time">
+                            {toDisplay(a.startTime)}
+                            <span className="appt-block-room">{a.room}</span>
+                          </div>
+                          <div className="appt-block-name">{a.patientName}</div>
+                          <div className="appt-block-detail">{a.title}</div>
                         </div>
-                        <div className="appt-block-name">{a.patientName}</div>
-                        <div className="appt-block-detail">
-                          {a.title} · {a.room || 'No room'}
-                        </div>
-                      </div>
-                    )
-                  })}
-                  {loading && <div className="appt-day-loading">…</div>}
+                      )
+                    })}
+                    {nowTop != null && <div className="appt-now-line" style={{ top: nowTop }} />}
+                    {loading && <div className="appt-day-loading">Loading…</div>}
+                  </div>
                 </div>
               )
             })}
-
-            {weekContainsToday && nowMinutes >= START_HOUR * 60 && nowMinutes <= (START_HOUR + 9) * 60 && (
-              <div className="appt-now" style={{ top: ((nowMinutes - START_HOUR * 60) / 60) * HOUR_PX }}>
-                <span className="appt-now-label">{nowIso}</span>
-                <span className="appt-now-dot" />
-              </div>
-            )}
           </div>
         </section>
 
         <aside className="appt-agenda">
-          <div className="agenda-tabs">
-            <span className="agenda-tab">Today</span>
-            <span className="agenda-left">{remainingToday} LEFT</span>
+          <div className="agenda-head">
+            <div className="agenda-tabs">
+              <span className="agenda-tab">
+                {selectedDay.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+              </span>
+              <span className="agenda-left">{remainingLeft} LEFT</span>
+            </div>
+            <span className="agenda-sub">{agendaAppointments.length} shown</span>
           </div>
 
-          {todayAppointments.length === 0 ? (
-            <p className="agenda-empty">{loading ? 'Loading…' : 'No appointments today.'}</p>
+          {agendaAppointments.length === 0 ? (
+            <p className="agenda-empty">{loading ? 'Loading…' : 'No appointments this day.'}</p>
           ) : (
-            todayAppointments.map((a) => (
-              <div key={a.id} className="agenda-card">
-                <div className="agenda-time">{toDisplay(a.startTime)}</div>
+            agendaAppointments.map((a) => (
+              <div key={a.id} className={`agenda-card ag-${a.status}`}>
+                <div className="agenda-top">
+                  <span className="agenda-time">{toDisplay(a.startTime)}</span>
+                  <span className="agenda-status-chip">{a.status.replace('_', ' ')}</span>
+                </div>
                 <div className="agenda-name">{a.patientName}</div>
                 <div className="agenda-detail">
-                  {a.title} · {a.room || 'No room'}
+                  {a.title}
+                  {a.room ? ` · ${a.room}` : ''}
                 </div>
                 {a.status === 'scheduled' && (
                   <div className="agenda-actions">
                     <button type="button" className="agenda-confirm" onClick={() => void setStatus(a, 'confirmed')}>
                       Confirm
                     </button>
-                    <button type="button" className="agenda-close" onClick={() => void setStatus(a, 'cancelled')}>
-                      <X size={11} weight="bold" />
+                    <button type="button" className="agenda-close" title="Cancel" onClick={() => void setStatus(a, 'cancelled')}>
+                      <X size={12} weight="bold" />
                     </button>
                   </div>
                 )}
@@ -346,28 +449,26 @@ const Appointments = ({ searchQuery, createOpen, onCreateOpenChange }: Appointme
                     <button type="button" className="agenda-confirm" onClick={() => void setStatus(a, 'completed')}>
                       Complete
                     </button>
-                    <button type="button" className="agenda-close" onClick={() => void setStatus(a, 'cancelled')}>
-                      <X size={11} weight="bold" />
+                    <button type="button" className="agenda-close" title="Cancel" onClick={() => void setStatus(a, 'cancelled')}>
+                      <X size={12} weight="bold" />
                     </button>
                   </div>
                 )}
                 {['completed', 'cancelled', 'no_show'].includes(a.status) && (
-                  <div className="agenda-status">
-                    {a.status === 'completed' ? 'Completed' : a.status === 'cancelled' ? 'Cancelled' : 'No Show'}
+                  <div className="agenda-actions">
+                    <button
+                      type="button"
+                      className="agenda-close"
+                      title="Reopen"
+                      onClick={() => void setStatus(a, 'scheduled')}
+                    >
+                      Reopen
+                    </button>
                   </div>
                 )}
               </div>
             ))
           )}
-
-          <div className="ai-card">
-            <Sparkle size={54} weight="fill" className="ai-sparkle" />
-            <div className="ai-title">Need help scheduling?</div>
-            <p className="ai-body">AI-Assistant can optimize your week for maximum revenue.</p>
-            <button type="button" className="ai-button" onClick={() => toast.push('Schedule optimizer coming soon', { tone: 'info' })}>
-              Optimize Schedule
-            </button>
-          </div>
         </aside>
       </div>
 
@@ -376,24 +477,73 @@ const Appointments = ({ searchQuery, createOpen, onCreateOpenChange }: Appointme
         onClose={close}
         title={editing ? `Edit Appointment` : 'New Appointment'}
         subtitle={editing ? `${editing.patientName} · ${editing.id}` : 'Schedule a visit for a patient'}
-        size="md"
+        size="lg"
       >
         <div className="appt-form">
           <label className="af-field af-full">
             <span>Patient</span>
-            <select {...formField('patientId')}>
-              <option value="">Select patient…</option>
-              {patients.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+            <div className="af-patient-row">
+              <select {...formField('patientId')}>
+                <option value="">Select patient…</option>
+                {patients.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="af-add-patient"
+                onClick={() => setPatientModalOpen(true)}
+              >
+                <Plus size={12} weight="bold" />
+                New Patient
+              </button>
+            </div>
           </label>
+
           <label className="af-field">
             <span>Title</span>
-            <input {...formField('title')} />
+            <select
+              value={form.title}
+              onChange={(e) => {
+                if (e.target.value === '__add__') {
+                  setAddingTitle(true)
+                } else {
+                  setAddingTitle(false)
+                  setForm((f) => ({ ...f, title: e.target.value }))
+                }
+              }}
+            >
+              {titles.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+              <option value="__add__">＋ Add new title…</option>
+            </select>
           </label>
+
+          {addingTitle && (
+            <div className="af-new-title">
+              <input
+                autoFocus
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                placeholder="New appointment title"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    addTitle()
+                  }
+                }}
+              />
+              <button type="button" className="pf-btn pf-save" onClick={addTitle} disabled={!newTitle.trim()}>
+                Add
+              </button>
+            </div>
+          )}
+
           <label className="af-field">
             <span>Date</span>
             <input type="date" {...formField('date')} />
@@ -403,8 +553,17 @@ const Appointments = ({ searchQuery, createOpen, onCreateOpenChange }: Appointme
             <input type="time" {...formField('startTime')} />
           </label>
           <label className="af-field">
-            <span>End time</span>
-            <input type="time" {...formField('endTime')} />
+            <span>Visit time</span>
+            <select
+              value={form.durationMinutes}
+              onChange={(e) => setForm((f) => ({ ...f, durationMinutes: Number(e.target.value) }))}
+            >
+              {DURATIONS.map((d) => (
+                <option key={d} value={d}>
+                  {d} minutes
+                </option>
+              ))}
+            </select>
           </label>
           <label className="af-field">
             <span>Doctor</span>
@@ -419,7 +578,7 @@ const Appointments = ({ searchQuery, createOpen, onCreateOpenChange }: Appointme
           <label className="af-field">
             <span>Room</span>
             <select {...formField('room')}>
-              {ROOMS.map((r) => (
+              {roomList.map((r) => (
                 <option key={r} value={r}>
                   {r}
                 </option>
@@ -441,6 +600,7 @@ const Appointments = ({ searchQuery, createOpen, onCreateOpenChange }: Appointme
             <textarea {...formField('notes')} rows={2} placeholder="Patient notes, prep instructions…" />
           </label>
         </div>
+
         <div className="appt-form-actions">
           <button type="button" className="pf-btn pf-cancel" onClick={close}>
             Cancel
@@ -450,6 +610,12 @@ const Appointments = ({ searchQuery, createOpen, onCreateOpenChange }: Appointme
           </button>
         </div>
       </Modal>
+
+      <PatientCreateModal
+        open={patientModalOpen}
+        onClose={() => setPatientModalOpen(false)}
+        onCreated={(p) => setForm((f) => ({ ...f, patientId: p.id }))}
+      />
     </div>
   )
 }
