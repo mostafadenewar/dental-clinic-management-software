@@ -10,7 +10,7 @@ import {
   CaretLeft,
 } from '@phosphor-icons/react'
 import { api, useBackendReady, type PatientRecord } from '../api/client'
-import { useLookups } from '../api/lookups'
+import { useLookups } from '../api/lookups-context'
 import { Modal } from '../components/Modal'
 import { useToast } from '../components/toastStore'
 import { currency, dateShort } from '../utils/format'

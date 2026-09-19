@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { X, Sparkle, CaretLeft, CaretRight, CalendarBlank } from '@phosphor-icons/react'
 import { api, useBackendReady, type AppointmentRecord } from '../api/client'
-import { useLookups } from '../api/lookups'
+import { useLookups } from '../api/lookups-context'
 import { Modal } from '../components/Modal'
 import { useToast } from '../components/toastStore'
 import './appointments.css'

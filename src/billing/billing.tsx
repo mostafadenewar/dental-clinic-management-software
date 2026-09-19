@@ -20,7 +20,7 @@ import type {
   PaymentMethod,
 } from '../types'
 import { api, useBackendReady, type BillingSummary } from '../api/client'
-import { useLookups } from '../api/lookups'
+import { useLookups } from '../api/lookups-context'
 import { currency, currencyWhole, dateShort } from '../utils/format'
 import { Modal } from '../components/Modal'
 import { TrendChart } from '../components/Charts'

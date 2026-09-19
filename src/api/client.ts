@@ -21,6 +21,7 @@ import type {
 // ---------------------------------------------------------------------------
 
 let baseUrl = (window as { __DCMS_API__?: string }).__DCMS_API__ ?? 'http://127.0.0.1:8419'
+let backendReady = false
 
 const readyListeners = new Set<() => void>()
 
@@ -28,16 +29,20 @@ const readyListeners = new Set<() => void>()
 export function initBackend(): void {
   const win = window as { dcms?: { onBackendUrl?: (cb: (url: string) => void) => () => void } }
   win.dcms?.onBackendUrl?.((url: string) => {
-    if (url && url !== baseUrl) {
+    if (url) {
       baseUrl = url.replace(/\/+$/, '')
+      backendReady = true
       readyListeners.forEach((fn) => fn())
     }
   })
 }
 
+initBackend()
+
 /** Subscribe to be notified when a backend URL first becomes known. */
 export function onBackendReady(fn: () => void): () => void {
   readyListeners.add(fn)
+  if (backendReady) fn()
   return () => readyListeners.delete(fn)
 }
 
@@ -63,7 +68,7 @@ export async function apiFetch<T>(method: string, path: string, body?: unknown):
 }
 
 export function useBackendReady(): boolean {
-  const [ready, setReady] = useState(false)
+  const [ready, setReady] = useState(backendReady)
   useEffect(() => onBackendReady(() => setReady(true)), [])
   return ready
 }

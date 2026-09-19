@@ -1,31 +1,7 @@
-import { createContext, useContext, useEffect, useState } from 'react'
-import type { CareProvider, InsuranceBenefit, StorageLocation } from '../types'
-import { api, initBackend, useBackendReady, type PatientRecord, type ProcedureCatalogEntry } from './client'
-
-export interface Lookups {
-  patients: PatientRecord[]
-  providers: CareProvider[]
-  coordinators: CareProvider[]
-  insurance: InsuranceBenefit[]
-  catalog: ProcedureCatalogEntry[]
-  locations: StorageLocation[]
-  refreshing: boolean
-  refresh: () => Promise<void>
-}
-
-const EMPTY: Lookups = {
-  patients: [],
-  providers: [],
-  coordinators: [],
-  insurance: [],
-  catalog: [],
-  locations: [],
-  refreshing: false,
-  refresh: async () => {},
-}
-
-const LookupsContext = createContext<Lookups>(EMPTY)
-export const useLookups = (): Lookups => useContext(LookupsContext)
+import { useCallback, useEffect, useState } from 'react'
+import type { Lookups } from './lookups-context'
+import { LookupsContext } from './lookups-context'
+import { api, useBackendReady } from './client'
 
 export function LookupsProvider({ children }: { children: React.ReactNode }) {
   const ready = useBackendReady()
@@ -39,9 +15,9 @@ export function LookupsProvider({ children }: { children: React.ReactNode }) {
   })
   const [refreshing, setRefreshing] = useState(false)
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
+    setRefreshing(true)
     try {
-      setRefreshing(true)
       const [patients, providers, coordinators, insurance, catalog, locations] = await Promise.all([
         api.patients(),
         api.providers(),
@@ -51,16 +27,16 @@ export function LookupsProvider({ children }: { children: React.ReactNode }) {
         api.locations(),
       ])
       setValues({ patients, providers, coordinators, insurance, catalog, locations })
+    } catch (error) {
+      console.error('[dcms] failed to load lookup data:', error)
     } finally {
       setRefreshing(false)
     }
-  }
-
-  useEffect(() => initBackend(), [])
+  }, [])
 
   useEffect(() => {
     if (ready) void refresh()
-  }, [ready])
+  }, [ready, refresh])
 
   const value: Lookups = { ...values, refreshing, refresh }
   return <LookupsContext.Provider value={value}>{children}</LookupsContext.Provider>

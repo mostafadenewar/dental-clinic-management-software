@@ -34,7 +34,7 @@ def now_iso() -> str:
 
 
 def connect() -> sqlite3.Connection:
-    os.makedirs(DATA_DIR, exist_ok=True)
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")

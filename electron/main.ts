@@ -55,10 +55,18 @@ function backendPath(): string {
 function startBackend() {
   const dir = backendPath()
   const python = process.env.DCMS_PYTHON ?? 'python'
-  const child = spawn(python, ['server.py'], {
+  const dbPath = app.isPackaged
+    ? path.join(app.getPath('userData'), 'data', 'dental_clinic.db')
+    : path.join(dir, 'data', 'dental_clinic.db')
+  const child = spawn(python, ['server.py', '--port', '0'], {
     cwd: dir,
     windowsHide: true,
     stdio: ['ignore', 'pipe', 'pipe'],
+    env: {
+      ...process.env,
+      DCMS_DB: dbPath,
+      PYTHONUNBUFFERED: '1',
+    },
   })
   backendProcess = child
 
@@ -70,8 +78,20 @@ function startBackend() {
       applicationWindow?.webContents.send('backend-url', backendUrl)
     }
   })
+  child.stderr?.on('data', (chunk: Buffer) => {
+    console.error(`[dcms] backend: ${chunk.toString().trimEnd()}`)
+  })
   child.on('error', (err) => {
     console.error('[dcms] failed to start Python backend:', err.message)
+  })
+  child.on('exit', (code, signal) => {
+    if (backendProcess === child) {
+      backendProcess = null
+      backendUrl = ''
+    }
+    if (code !== 0 && signal !== 'SIGTERM') {
+      console.error(`[dcms] backend exited unexpectedly (code=${code ?? 'null'}, signal=${signal ?? 'null'})`)
+    }
   })
 }
 

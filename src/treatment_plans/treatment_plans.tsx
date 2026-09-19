@@ -31,7 +31,7 @@ import type {
   PreAuthStatus,
 } from '../types'
 import { api, useBackendReady, type ProcedureCatalogEntry } from '../api/client'
-import { useLookups } from '../api/lookups'
+import { useLookups } from '../api/lookups-context'
 import {
   PLAN_STATUS_LABEL,
   planFinancials,

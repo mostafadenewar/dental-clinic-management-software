@@ -304,8 +304,9 @@ def run(port: int) -> None:
             seed_all(conn)
         finally:
             conn.close()
-    print(f"DCMS_BACKEND_PORT={port}", flush=True)
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    actual_port = server.server_address[1]
+    print(f"DCMS_BACKEND_PORT={actual_port}", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
