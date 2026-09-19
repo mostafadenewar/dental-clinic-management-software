@@ -7,7 +7,7 @@ import path from 'node:path'
 // compositor handoff and keeps resizing and repainting consistent.
 app.disableHardwareAcceleration()
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const electronDirectory = path.dirname(fileURLToPath(import.meta.url))
 
 // The built directory structure
 //
@@ -18,7 +18,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // │ │ ├── main.js
 // │ │ └── preload.mjs
 // │
-process.env.APP_ROOT = path.join(__dirname, '..')
+process.env.APP_ROOT = path.join(electronDirectory, '..')
 
 // 🚧 Use ['ENV_NAME'] avoid vite:define plugin - Vite@2.x
 export const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
@@ -27,17 +27,17 @@ export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 'public') : RENDERER_DIST
 
-let win: BrowserWindow | null
+let applicationWindow: BrowserWindow | null
 
-const SCREEN_WIDTH = 1920
-const SCREEN_HEIGHT = 1080
+const DEFAULT_WINDOW_WIDTH = 1920
+const DEFAULT_WINDOW_HEIGHT = 1080
 const MIN_WINDOW_WIDTH = 1500
 const MIN_WINDOW_HEIGHT = 1050
 
 function createWindow() {
-  win = new BrowserWindow({
-    width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT,
+  applicationWindow = new BrowserWindow({
+    width: DEFAULT_WINDOW_WIDTH,
+    height: DEFAULT_WINDOW_HEIGHT,
     minWidth: MIN_WINDOW_WIDTH,
     minHeight: MIN_WINDOW_HEIGHT,
     frame: false,
@@ -48,41 +48,41 @@ function createWindow() {
       backgroundThrottling: false,
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'preload.mjs'),
+      preload: path.join(electronDirectory, 'preload.mjs'),
     },
   })
 
-  win.once('ready-to-show', () => {
-    win?.show()
+  applicationWindow.once('ready-to-show', () => {
+    applicationWindow?.show()
   })
 
   // Test active push message to Renderer-process.
-  win.webContents.on('did-finish-load', () => {
-    win?.webContents.send('main-process-message', (new Date).toLocaleString())
+  applicationWindow.webContents.on('did-finish-load', () => {
+    applicationWindow?.webContents.send('main-process-message', (new Date).toLocaleString())
   })
 
   if (VITE_DEV_SERVER_URL) {
-    win.loadURL(VITE_DEV_SERVER_URL)
+    applicationWindow.loadURL(VITE_DEV_SERVER_URL)
   } else {
-    // win.loadFile('dist/index.html')
-    win.loadFile(path.join(RENDERER_DIST, 'index.html'))
+    // applicationWindow.loadFile('dist/index.html')
+    applicationWindow.loadFile(path.join(RENDERER_DIST, 'index.html'))
   }
 }
 
 ipcMain.on('window-minimize', () => {
-  win?.minimize()
+  applicationWindow?.minimize()
 })
 
 ipcMain.on('window-toggle-maximize', () => {
-  if (win?.isMaximized()) {
-    win.unmaximize()
+  if (applicationWindow?.isMaximized()) {
+    applicationWindow.unmaximize()
   } else {
-    win?.maximize()
+    applicationWindow?.maximize()
   }
 })
 
 ipcMain.on('window-close', () => {
-  win?.close()
+  applicationWindow?.close()
 })
 
 // Quit when all windows are closed, except on macOS. There, it's common
@@ -91,7 +91,7 @@ ipcMain.on('window-close', () => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
-    win = null
+    applicationWindow = null
   }
 })
 
