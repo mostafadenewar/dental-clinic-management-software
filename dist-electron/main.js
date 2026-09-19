@@ -1,53 +1,74 @@
-import { app as n, ipcMain as s, BrowserWindow as t } from "electron";
-import { fileURLToPath as l } from "node:url";
-import o from "node:path";
-n.disableHardwareAcceleration();
-const r = o.dirname(l(import.meta.url));
-process.env.APP_ROOT = o.join(r, "..");
-const i = process.env.VITE_DEV_SERVER_URL, R = o.join(process.env.APP_ROOT, "dist-electron"), a = o.join(process.env.APP_ROOT, "dist");
-process.env.VITE_PUBLIC = i ? o.join(process.env.APP_ROOT, "public") : a;
-let e;
-const d = 1920, m = 1080, p = 1500, _ = 1050;
-function c() {
-  e = new t({
-    width: d,
-    height: m,
-    minWidth: p,
-    minHeight: _,
-    frame: !1,
-    show: !1,
+import { app, ipcMain, BrowserWindow } from "electron";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+app.disableHardwareAcceleration();
+const electronDirectory = path.dirname(fileURLToPath(import.meta.url));
+process.env.APP_ROOT = path.join(electronDirectory, "..");
+const VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
+const MAIN_DIST = path.join(process.env.APP_ROOT, "dist-electron");
+const RENDERER_DIST = path.join(process.env.APP_ROOT, "dist");
+process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, "public") : RENDERER_DIST;
+let applicationWindow;
+const DEFAULT_WINDOW_WIDTH = 1920;
+const DEFAULT_WINDOW_HEIGHT = 1080;
+const MIN_WINDOW_WIDTH = 1500;
+const MIN_WINDOW_HEIGHT = 1050;
+function createWindow() {
+  applicationWindow = new BrowserWindow({
+    width: DEFAULT_WINDOW_WIDTH,
+    height: DEFAULT_WINDOW_HEIGHT,
+    minWidth: MIN_WINDOW_WIDTH,
+    minHeight: MIN_WINDOW_HEIGHT,
+    frame: false,
+    show: false,
     backgroundColor: "#f8fafc",
-    icon: o.join(process.env.VITE_PUBLIC, "electron-vite.svg"),
+    icon: path.join(process.env.VITE_PUBLIC, "electron-vite.svg"),
     webPreferences: {
-      backgroundThrottling: !1,
-      nodeIntegration: !1,
-      contextIsolation: !0,
-      preload: o.join(r, "preload.mjs")
+      backgroundThrottling: false,
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(electronDirectory, "preload.mjs")
     }
-  }), e.once("ready-to-show", () => {
-    e == null || e.show();
-  }), e.webContents.on("did-finish-load", () => {
-    e == null || e.webContents.send("main-process-message", (/* @__PURE__ */ new Date()).toLocaleString());
-  }), i ? e.loadURL(i) : e.loadFile(o.join(a, "index.html"));
+  });
+  applicationWindow.once("ready-to-show", () => {
+    applicationWindow == null ? void 0 : applicationWindow.show();
+  });
+  applicationWindow.webContents.on("did-finish-load", () => {
+    applicationWindow == null ? void 0 : applicationWindow.webContents.send("main-process-message", (/* @__PURE__ */ new Date()).toLocaleString());
+  });
+  if (VITE_DEV_SERVER_URL) {
+    applicationWindow.loadURL(VITE_DEV_SERVER_URL);
+  } else {
+    applicationWindow.loadFile(path.join(RENDERER_DIST, "index.html"));
+  }
 }
-s.on("window-minimize", () => {
-  e == null || e.minimize();
+ipcMain.on("window-minimize", () => {
+  applicationWindow == null ? void 0 : applicationWindow.minimize();
 });
-s.on("window-toggle-maximize", () => {
-  e != null && e.isMaximized() ? e.unmaximize() : e == null || e.maximize();
+ipcMain.on("window-toggle-maximize", () => {
+  if (applicationWindow == null ? void 0 : applicationWindow.isMaximized()) {
+    applicationWindow.unmaximize();
+  } else {
+    applicationWindow == null ? void 0 : applicationWindow.maximize();
+  }
 });
-s.on("window-close", () => {
-  e == null || e.close();
+ipcMain.on("window-close", () => {
+  applicationWindow == null ? void 0 : applicationWindow.close();
 });
-n.on("window-all-closed", () => {
-  process.platform !== "darwin" && (n.quit(), e = null);
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") {
+    app.quit();
+    applicationWindow = null;
+  }
 });
-n.on("activate", () => {
-  t.getAllWindows().length === 0 && c();
+app.on("activate", () => {
+  if (BrowserWindow.getAllWindows().length === 0) {
+    createWindow();
+  }
 });
-n.whenReady().then(c);
+app.whenReady().then(createWindow);
 export {
-  R as MAIN_DIST,
-  a as RENDERER_DIST,
-  i as VITE_DEV_SERVER_URL
+  MAIN_DIST,
+  RENDERER_DIST,
+  VITE_DEV_SERVER_URL
 };
