@@ -1,0 +1,140 @@
+.odo-root {
+  position: relative;
+  width: 100%;
+  padding: 4px 2px 2px;
+}
+
+.odo-svg {
+  display: block;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  background: #fbfcfe;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.odo-frame {
+  fill: none;
+  stroke: #e9eef5;
+  stroke-width: 1.4;
+  stroke-dasharray: 5 6;
+}
+
+.odo-frame-inner {
+  stroke: #f1f5f9;
+  stroke-width: 1;
+  stroke-dasharray: 2 5;
+}
+
+.odo-quads text {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  fill: #94a3b8;
+}
+
+.odo-tooth-labels {
+  pointer-events: none;
+  fill: #64748b;
+  font-size: 8px;
+}
+
+.odo-tooth-labels text {
+  paint-order: stroke;
+  stroke: #fbfcfe;
+  stroke-width: 2px;
+  stroke-linejoin: round;
+}
+
+/* Hover scale is applied to the inner glyph group only, so the outer
+   translate/rotate transform (arch placement + fan tilt) is not clobbered. */
+.odo-glyph {
+  transform-origin: 50% 50%;
+  transform-box: fill-box;
+  transition: transform 130ms ease, filter 130ms ease;
+}
+
+.odo-tooth {
+  cursor: default;
+  outline: none;
+}
+
+.odo-tooth.clickable {
+  cursor: pointer;
+}
+
+.odo-tooth.clickable:hover .odo-glyph {
+  transform: scale(1.09);
+  filter: drop-shadow(0 3px 5px rgba(37, 99, 235, 0.25));
+}
+
+.odo-tooth.selected .odo-glyph {
+  transform: scale(1.05);
+}
+
+.odo-tooth.clickable:focus-visible .odo-glyph {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* --- legend ------------------------------------------------------------- */
+
+.odo-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 13px;
+  justify-content: center;
+  align-items: center;
+  margin-top: 9px;
+  font-size: 10.5px;
+  color: #475569;
+  font-weight: 600;
+}
+
+.odo-lg {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.odo-lg i.s {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  display: inline-block;
+  border: 1px solid #cbd5e1;
+}
+
+.odo-lg i.s.healthy { background: #f8fafc; border-color: #cbd5e1; }
+.odo-lg i.s.planned { background: #dcecff; border-color: #3b82f6; }
+.odo-lg i.s.completed { background: #22c55e; border-color: #15803d; }
+.odo-lg i.s.selected { background: #2563eb; border-color: #1d4ed8; }
+
+.odo-lg-sep {
+  width: 1px;
+  height: 20px;
+  background: #e2e8f0;
+}
+
+.odo-type-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.odo-tg {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #64748b;
+  font-size: 10px;
+}
+
+.odo-glyph-mini {
+  width: 16px;
+  height: 26px;
+  display: inline-block;
+  vertical-align: middle;
+}

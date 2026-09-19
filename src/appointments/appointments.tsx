@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { X, Plus, CaretLeft, CaretRight, CalendarBlank } from '@phosphor-icons/react'
+import { X, Plus, CaretLeft, CaretRight, CalendarBlank, Trash } from '@phosphor-icons/react'
 import { api, useBackendReady, type AppointmentRecord } from '../api/client'
 import { useLookups } from '../api/lookups-context'
 import { Modal } from '../components/Modal'
@@ -161,6 +161,7 @@ const Appointments = ({ searchQuery, createOpen, onCreateOpenChange }: Appointme
   const [draftDate, setDraftDate] = useState(() => toIso(new Date()))
   const [form, setForm] = useState<AppointmentForm>(() => emptyForm(toIso(new Date())))
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [titles, setTitles] = useState<string[]>(DEFAULT_TITLES)
   const [addingTitle, setAddingTitle] = useState(false)
   const [newTitle, setNewTitle] = useState('')
@@ -171,12 +172,13 @@ const Appointments = ({ searchQuery, createOpen, onCreateOpenChange }: Appointme
     setLoading(true)
     try {
       setAppointments(await api.appointments(selectedDate, selectedDate))
-    } catch {
+    } catch (err) {
       setAppointments([])
+      toast.push(err instanceof Error ? err.message : 'Failed to load appointments', { tone: 'danger' })
     } finally {
       setLoading(false)
     }
-  }, [selectedDate])
+  }, [selectedDate, toast])
 
   useEffect(() => {
     if (ready) void load()
@@ -239,7 +241,15 @@ const Appointments = ({ searchQuery, createOpen, onCreateOpenChange }: Appointme
 
   const agendaQuery = searchQuery.trim().toLowerCase()
   const agendaAppointments = useMemo(
-    () => (agendaQuery ? dayAppointments.filter((a) => a.patientName.toLowerCase().includes(agendaQuery)) : dayAppointments),
+    () =>
+      agendaQuery
+        ? dayAppointments.filter((a) =>
+            [a.patientName, a.title, a.providerName, a.room]
+              .join(' ')
+              .toLowerCase()
+              .includes(agendaQuery),
+          )
+        : dayAppointments,
     [dayAppointments, agendaQuery],
   )
 
@@ -259,7 +269,12 @@ const Appointments = ({ searchQuery, createOpen, onCreateOpenChange }: Appointme
       return
     }
     const duration = Number(form.durationMinutes) || 30
-    const payload = { ...form, endTime: addMinutes(form.startTime, duration) }
+    const endTime = addMinutes(form.startTime, duration)
+    if (toMinutes(endTime) <= toMinutes(form.startTime)) {
+      toast.push('Appointment must finish on the same day', { tone: 'warning' })
+      return
+    }
+    const payload = { ...form, endTime }
     setSaving(true)
     try {
       if (editing) {
@@ -269,6 +284,7 @@ const Appointments = ({ searchQuery, createOpen, onCreateOpenChange }: Appointme
         await api.createAppointment(payload)
         toast.push('Appointment scheduled')
       }
+      if (selectedDate !== form.date) setSelectedDate(form.date)
       close()
       await load()
     } catch (err) {
@@ -294,6 +310,23 @@ const Appointments = ({ searchQuery, createOpen, onCreateOpenChange }: Appointme
       await load()
     } catch (err) {
       toast.push(err instanceof Error ? err.message : 'Update failed', { tone: 'danger' })
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!editing || deleting) return
+    const confirmed = window.confirm(`Delete ${editing.title} for ${editing.patientName}? This cannot be undone.`)
+    if (!confirmed) return
+    setDeleting(true)
+    try {
+      await api.deleteAppointment(editing.id)
+      toast.push('Appointment deleted')
+      close()
+      await load()
+    } catch (err) {
+      toast.push(err instanceof Error ? err.message : 'Failed to delete appointment', { tone: 'danger' })
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -602,6 +635,12 @@ const Appointments = ({ searchQuery, createOpen, onCreateOpenChange }: Appointme
         </div>
 
         <div className="appt-form-actions">
+          {editing && (
+            <button type="button" className="pf-btn pf-danger appt-delete-btn" onClick={() => void handleDelete()} disabled={saving || deleting}>
+              <Trash size={13} weight="bold" />
+              {deleting ? 'Deleting…' : 'Delete'}
+            </button>
+          )}
           <button type="button" className="pf-btn pf-cancel" onClick={close}>
             Cancel
           </button>

@@ -1,16 +1,18 @@
 /* Appointments page — day view with per-room columns + agenda */
 
 .appt-page {
-  padding: 16px;
+  padding: 10px 12px 12px;
   height: 100%;
   display: flex;
   flex-direction: column;
-  min-width: 860px;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
 }
 
 .appt-cols {
   display: flex;
-  gap: 14px;
+  gap: 10px;
   align-items: stretch;
   flex: 1;
   min-height: 0;
@@ -34,7 +36,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 16px;
+  padding: 10px 12px;
   border-bottom: 1px solid #eef2f7;
 }
 
@@ -190,8 +192,8 @@
 }
 
 .appt-room-col {
-  flex: 1 1 244px;
-  min-width: 244px;
+  flex: 1 1 190px;
+  min-width: 180px;
   border-right: 1px solid #f1f5f9;
   display: flex;
   flex-direction: column;
@@ -394,13 +396,13 @@
 /* -- Agenda ---------------------------------------------------------------- */
 
 .appt-agenda {
-  width: 304px;
+  width: 276px;
   flex-shrink: 0;
   background: #ffffff;
   border: 1px solid #e8edf3;
   border-radius: 14px;
   box-shadow: 0 10px 18px -14px rgba(15, 23, 42, 0.16);
-  padding: 16px 16px 20px;
+  padding: 12px 12px 14px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -683,6 +685,10 @@
   margin-top: 18px;
 }
 
+.appt-delete-btn {
+  margin-right: auto;
+}
+
 .pf-btn {
   border: 1px solid transparent;
   border-radius: 8px;
@@ -714,6 +720,38 @@
 .pf-cancel {
   background-color: #f1f5f9;
   color: #475569;
+}
+
+.pf-danger {
+  background-color: #fff1f2;
+  border-color: #fecdd3;
+  color: #be123c;
+}
+
+.pf-danger:hover:not(:disabled) {
+  background-color: #ffe4e6;
+  border-color: #fda4af;
+}
+
+.pf-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@media (max-width: 1100px) {
+  .appt-cols {
+    flex-direction: column;
+    overflow: auto;
+  }
+
+  .appt-calendar {
+    min-height: 560px;
+  }
+
+  .appt-agenda {
+    width: auto;
+    min-height: 220px;
+  }
 }
 
 .pf-cancel:hover {

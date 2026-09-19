@@ -51,10 +51,7 @@ CREATE TABLE IF NOT EXISTS coordinators (
 );
 CREATE TABLE IF NOT EXISTS insurance (
   id TEXT PRIMARY KEY, provider TEXT NOT NULL, policy_number TEXT NOT NULL DEFAULT '',
-  group_number TEXT NOT NULL DEFAULT '', coverage_percent INTEGER NOT NULL DEFAULT 0,
-  annual_maximum REAL NOT NULL DEFAULT 0, used_this_year REAL NOT NULL DEFAULT 0,
-  eligibility_status TEXT NOT NULL DEFAULT 'not_verified',
-  pre_auth_status TEXT NOT NULL DEFAULT 'not_required', last_verified TEXT
+  notes TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS patients (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '',
@@ -68,27 +65,32 @@ CREATE TABLE IF NOT EXISTS appointments (
   end_time TEXT NOT NULL, room TEXT NOT NULL DEFAULT 'Room 1',
   status TEXT NOT NULL DEFAULT 'scheduled', notes TEXT NOT NULL DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, name TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'staff', active INTEGER NOT NULL DEFAULT 1
+);
 CREATE TABLE IF NOT EXISTS treatment_plans (
-  id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
-  status TEXT NOT NULL DEFAULT 'draft', patient_id TEXT NOT NULL,
-  doctor_id TEXT NOT NULL DEFAULT 'DOC-01', coordinator_id TEXT NOT NULL DEFAULT 'COR-01',
-  insurance_id TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+  id TEXT PRIMARY KEY, patient_id TEXT NOT NULL, name TEXT NOT NULL,
+  notes TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS plan_phases (
-  id TEXT PRIMARY KEY, plan_id TEXT NOT NULL, name TEXT NOT NULL,
-  ordr INTEGER NOT NULL DEFAULT 1, description TEXT NOT NULL DEFAULT ''
-);
-CREATE TABLE IF NOT EXISTS plan_procedures (
-  id TEXT PRIMARY KEY, plan_id TEXT NOT NULL, phase_id TEXT NOT NULL,
+CREATE TABLE IF NOT EXISTS treatment_procedures (
+  id TEXT PRIMARY KEY, patient_id TEXT NOT NULL, plan_id TEXT,
   procedure_name TEXT NOT NULL, code TEXT NOT NULL DEFAULT '',
-  category TEXT NOT NULL DEFAULT 'Diagnostic', teeth TEXT NOT NULL DEFAULT '[]',
+  category TEXT NOT NULL DEFAULT 'General', teeth TEXT NOT NULL DEFAULT '[]',
   provider_id TEXT NOT NULL DEFAULT 'DOC-01', status TEXT NOT NULL DEFAULT 'planned',
-  planned_date TEXT, scheduled_date TEXT, completed_date TEXT,
-  fee REAL NOT NULL DEFAULT 0, insurance_estimate REAL NOT NULL DEFAULT 0,
-  patient_responsibility REAL NOT NULL DEFAULT 0, notes TEXT NOT NULL DEFAULT ''
+  done_date TEXT, fee REAL NOT NULL DEFAULT 0, notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS care_tasks (
-  id TEXT PRIMARY KEY, plan_id TEXT NOT NULL, label TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0
+CREATE TABLE IF NOT EXISTS patient_payments (
+  id TEXT PRIMARY KEY, procedure_id TEXT NOT NULL,
+  amount_paid REAL NOT NULL DEFAULT 0, insurance_amount REAL NOT NULL DEFAULT 0,
+  method TEXT NOT NULL DEFAULT 'cash', date TEXT NOT NULL,
+  reference TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS expenses (
+  id TEXT PRIMARY KEY, category TEXT NOT NULL, description TEXT NOT NULL,
+  amount REAL NOT NULL DEFAULT 0, date TEXT NOT NULL,
+  paid_to TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS invoices (
   id TEXT PRIMARY KEY, number TEXT NOT NULL, patient_id TEXT NOT NULL,
@@ -102,10 +104,6 @@ CREATE TABLE IF NOT EXISTS invoice_line_items (
 CREATE TABLE IF NOT EXISTS payments (
   id TEXT PRIMARY KEY, invoice_id TEXT NOT NULL, amount REAL NOT NULL DEFAULT 0,
   method TEXT NOT NULL DEFAULT 'other', date TEXT NOT NULL, reference TEXT NOT NULL DEFAULT ''
-);
-CREATE TABLE IF NOT EXISTS insurance_claims (
-  id TEXT PRIMARY KEY, invoice_id TEXT NOT NULL, payer TEXT NOT NULL,
-  amount REAL NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'pending', filed_date TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS storage_locations (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, capacity INTEGER NOT NULL DEFAULT 0,
@@ -144,11 +142,41 @@ CREATE TABLE IF NOT EXISTS procedure_catalog (
 """
 
 
+# Tables that existed in earlier schema versions. When the schema version
+# changes we drop everything and rebuild (this app is demo-data driven, so a
+# destructive version bump keeps things simple and correct).
+TABLE_NAMES = [
+    "providers", "coordinators", "insurance", "patients",
+    "appointments", "users", "treatment_plans", "plan_phases",
+    "plan_procedures", "care_tasks", "insurance_benefits", "treatment_templates",
+    "treatment_procedures", "patient_payments", "expenses", "invoices",
+    "invoice_line_items", "invoice_payments", "payments", "insurance_claims",
+    "storage_locations", "inventory_items", "inventory_transactions",
+    "supplier_orders", "supplier_order_lines", "activity_log", "procedure_catalog",
+]
+
+SCHEMA_VERSION = "4"
+
+
 def init_db() -> None:
     conn = connect()
     try:
-        conn.executescript(SCHEMA)
-        conn.commit()
+        conn.execute("CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        row = conn.execute("SELECT value FROM app_meta WHERE key = 'schema_version'").fetchone()
+        version = row["value"] if row else None
+        if version != SCHEMA_VERSION:
+            conn.execute("PRAGMA foreign_keys = OFF")
+            for table in TABLE_NAMES:
+                conn.execute(f"DROP TABLE IF EXISTS {table}")
+            conn.executescript(SCHEMA)
+            conn.execute(
+                "INSERT OR REPLACE INTO app_meta (key, value) VALUES ('schema_version', ?)",
+                (SCHEMA_VERSION,),
+            )
+            conn.commit()
+        else:
+            conn.executescript(SCHEMA)
+            conn.commit()
     finally:
         conn.close()
 

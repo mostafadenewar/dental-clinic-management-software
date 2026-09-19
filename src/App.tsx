@@ -34,11 +34,8 @@ function App() {
   }
 
   const primaryAction = (() => {
-    if (page === 'treatment') {
-      return { label: 'New Plan', onClick: () => setTreatmentCreateOpen(true) }
-    }
     if (page === 'billing') {
-      return { label: 'Create Invoice', onClick: () => setBillingCreateOpen(true) }
+      return { label: 'Add Expense', onClick: () => setBillingCreateOpen(true) }
     }
     if (page === 'inventory') {
       return { label: 'Add Stock', onClick: () => setInventoryCreateOpen(true) }

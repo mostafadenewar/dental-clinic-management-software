@@ -77,6 +77,12 @@ def create_appointment(conn: sqlite3.Connection, data: dict) -> dict | None:
     dur = data.get("durationMinutes")
     if not end and dur and start:
         end = _time_add(start, int(dur))
+    if not data.get("patientId"):
+        raise ValueError("patientId is required")
+    if not data.get("date") or not start or not end:
+        raise ValueError("date, startTime, and endTime are required")
+    if to_minutes(end) <= to_minutes(start):
+        raise ValueError("endTime must be later than startTime")
     aid = data.get("id") or next_appt_id(conn)
     conn.execute(
         "INSERT OR REPLACE INTO appointments "
@@ -90,20 +96,36 @@ def create_appointment(conn: sqlite3.Connection, data: dict) -> dict | None:
 
 
 def update_appointment(conn: sqlite3.Connection, aid: str, data: dict) -> dict | None:
-    fields = ["patient_id", "provider_id", "title", "date", "start_time",
-              "end_time", "room", "notes"]
-    for key in fields:
+    mapping = {
+        "patientId": "patient_id",
+        "providerId": "provider_id",
+        "title": "title",
+        "date": "date",
+        "startTime": "start_time",
+        "endTime": "end_time",
+        "room": "room",
+        "notes": "notes",
+    }
+    current = conn.execute("SELECT * FROM appointments WHERE id = ?", (aid,)).fetchone()
+    if not current:
+        return None
+    merged = {key: current[column] for key, column in mapping.items()}
+    merged.update({key: value for key, value in data.items() if key in mapping})
+    if not merged["patientId"]:
+        raise ValueError("patientId is required")
+    if not merged["date"] or not merged["startTime"] or not merged["endTime"]:
+        raise ValueError("date, startTime, and endTime are required")
+    if to_minutes(merged["endTime"]) <= to_minutes(merged["startTime"]):
+        raise ValueError("endTime must be later than startTime")
+    for key, column in mapping.items():
         if key in data:
-            conn.execute(f"UPDATE appointments SET {key} = ? WHERE id = ?", (data[key], aid))
-    if "patientId" in data:
-        conn.execute("UPDATE appointments SET patient_id = ? WHERE id = ?", (data["patientId"], aid))
-    if "providerId" in data:
-        conn.execute("UPDATE appointments SET provider_id = ? WHERE id = ?", (data["providerId"], aid))
-    if "startTime" in data:
-        conn.execute("UPDATE appointments SET start_time = ? WHERE id = ?", (data["startTime"], aid))
-    if "endTime" in data:
-        conn.execute("UPDATE appointments SET end_time = ? WHERE id = ?", (data["endTime"], aid))
+            conn.execute(f"UPDATE appointments SET {column} = ? WHERE id = ?", (data[key], aid))
     return get_appointment(conn, aid)
+
+
+def to_minutes(value: str) -> int:
+    parsed = datetime.strptime(value, "%H:%M")
+    return parsed.hour * 60 + parsed.minute
 
 
 def set_appointment_status(conn: sqlite3.Connection, aid: str, status: str) -> dict | None:

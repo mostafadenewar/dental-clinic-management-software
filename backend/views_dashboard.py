@@ -54,8 +54,7 @@ def dashboard(conn: sqlite3.Connection) -> dict:
     pct = round(((current - previous) / previous * 100) if previous else 0, 1)
 
     active_plans = conn.execute(
-        "SELECT COUNT(*) AS c FROM treatment_plans "
-        "WHERE status IN ('pending_approval','approved','scheduled','in_progress')"
+        "SELECT COUNT(*) AS c FROM treatment_procedures WHERE status = 'planned'"
     ).fetchone()["c"]
     low_stock = conn.execute(
         "SELECT COUNT(*) AS c FROM inventory_items WHERE quantity_on_hand <= minimum_threshold"
