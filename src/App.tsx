@@ -8,6 +8,7 @@ import Appointments from './appointments/appointments.tsx'
 import TreatmentPlans from './treatment_plans/treatment_plans.tsx'
 import Billing from './billing/billing.tsx'
 import Inventory from './inventory/inventory.tsx'
+import { ToastProvider } from './components/Toast'
 
 export type PageKey =
   | 'dashboard'
@@ -20,21 +21,68 @@ export type PageKey =
 function App() {
   const [page, setPage] = useState<PageKey>('dashboard')
   const contentPage = useDeferredValue(page)
+  const [search, setSearch] = useState('')
+  const [treatmentCreateOpen, setTreatmentCreateOpen] = useState(false)
+  const [billingCreateOpen, setBillingCreateOpen] = useState(false)
+  const [inventoryCreateOpen, setInventoryCreateOpen] = useState(false)
+
+  const handleNavigate = (next: PageKey) => {
+    setPage(next)
+    setSearch('')
+  }
+
+  const primaryAction = (() => {
+    if (page === 'treatment') {
+      return { label: 'New Plan', onClick: () => setTreatmentCreateOpen(true) }
+    }
+    if (page === 'billing') {
+      return { label: 'Create Invoice', onClick: () => setBillingCreateOpen(true) }
+    }
+    if (page === 'inventory') {
+      return { label: 'Add Stock', onClick: () => setInventoryCreateOpen(true) }
+    }
+    return undefined
+  })()
 
   return (
     <div className="app-layout">
-      <SideBar current={page} onNavigate={setPage} />
-      <div className="app-main">
-        <Header page={page} />
-        <main className="app-content">
-          {contentPage === 'dashboard' && <Dashboard />}
-          {contentPage === 'patients' && <Patients />}
-          {contentPage === 'appointments' && <Appointments />}
-          {contentPage === 'treatment' && <TreatmentPlans />}
-          {contentPage === 'billing' && <Billing />}
-          {contentPage === 'inventory' && <Inventory />}
-        </main>
-      </div>
+      <SideBar current={page} onNavigate={handleNavigate} />
+      <ToastProvider>
+        <div className="app-main">
+          <Header
+            page={page}
+            searchValue={search}
+            onSearchChange={setSearch}
+            primaryAction={primaryAction}
+          />
+          <main className="app-content">
+            {contentPage === 'dashboard' && <Dashboard />}
+            {contentPage === 'patients' && <Patients />}
+            {contentPage === 'appointments' && <Appointments />}
+            {contentPage === 'treatment' && (
+              <TreatmentPlans
+                searchQuery={search}
+                createOpen={treatmentCreateOpen}
+                onCreateOpenChange={setTreatmentCreateOpen}
+              />
+            )}
+            {contentPage === 'billing' && (
+              <Billing
+                searchQuery={search}
+                createOpen={billingCreateOpen}
+                onCreateOpenChange={setBillingCreateOpen}
+              />
+            )}
+            {contentPage === 'inventory' && (
+              <Inventory
+                searchQuery={search}
+                createOpen={inventoryCreateOpen}
+                onCreateOpenChange={setInventoryCreateOpen}
+              />
+            )}
+          </main>
+        </div>
+      </ToastProvider>
     </div>
   )
 }
