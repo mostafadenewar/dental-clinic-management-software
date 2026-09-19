@@ -65,7 +65,7 @@ const ACTIVITY: ActivityItem[] = [
   {
     icon: <UserPlus size={13} weight="bold" />,
     tone: 'activity-teal',
-    text: 'New patient Priya Nair registered',
+    text: 'New patient Priya Nar registered',
     time: '2 hours ago',
   },
 ]
