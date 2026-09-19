@@ -1,9 +1,82 @@
 .sidebar {
-    width: 3rem;
-    height: 100vh;
-    background-color: #f7f7f7;
-    border-right: 1px solid #e0e0e0;
-    margin: 0.5rem;
-    margin-top: 0.2rem;
-    padding: 0;
+  width: 54px;
+  height: 100vh;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background-color: #f8fafc;
+  border-right: 1px solid #e2e8f0;
+}
+
+.sidebar-logo {
+  margin-top: 17px;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background-color: #2563eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 0 6px rgba(37, 99, 235, 0.06);
+  z-index: 1;
+}
+
+.sidebar-nav {
+  margin-top: 26px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.sidebar-system {
+  margin-top: auto;
+  margin-bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.sidebar-item {
+  position: relative;
+  width: 54px;
+  height: 41px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: #94a3b8;
+  transition: color 0.15s;
+}
+
+.sidebar-item:hover {
+  color: #2563eb;
+}
+
+.sidebar-item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-item-icon.filled {
+  color: #2563eb;
+}
+
+.sidebar-item-bar {
+  position: absolute;
+  left: 0;
+  top: 12px;
+  width: 3px;
+  height: 18px;
+  border-radius: 0 2px 2px 0;
+  background-color: #2563eb;
+  opacity: 0;
+}
+
+.sidebar-item.active .sidebar-item-bar {
+  opacity: 1;
 }
