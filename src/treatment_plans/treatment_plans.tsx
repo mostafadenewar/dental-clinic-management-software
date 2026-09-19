@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Plus,
   Printer,
@@ -26,22 +26,17 @@ import type {
   PlanStatus,
   ProcedureStatus,
   TreatmentCategory,
+  InsuranceBenefit,
+  EligibilityStatus,
+  PreAuthStatus,
 } from '../types'
+import { api, useBackendReady, type ProcedureCatalogEntry } from '../api/client'
+import { useLookups } from '../api/lookups-context'
 import {
-  AS_OF_DATE,
-  INITIAL_PLANS,
-  RECENTLY_UPDATED,
-  PATIENTS,
-  PROVIDERS,
-  INSURANCE_BY_ID,
-  PROVIDER_BY_ID,
-  COORDINATOR_BY_ID,
   PLAN_STATUS_LABEL,
   planFinancials,
   planProcedures,
   FILTER_MATCHES,
-  PROCEDURE_CATALOG,
-  type ProcedureCatalogEntry,
 } from '../data/treatmentData'
 import { currency, currencyWhole, dateShort } from '../utils/format'
 import { Modal } from '../components/Modal'
@@ -124,13 +119,47 @@ interface TreatmentPlansProps {
 
 const TreatmentPlans = ({ searchQuery, createOpen, onCreateOpenChange }: TreatmentPlansProps) => {
   const toast = useToast()
-  const [plans, setPlans] = useState<TreatmentPlan[]>(INITIAL_PLANS)
+  const ready = useBackendReady()
+  const { patients, providers, coordinators, insurance: insuranceList, catalog } = useLookups()
+  const [plans, setPlans] = useState<TreatmentPlan[]>([])
   const [filter, setFilter] = useState<PlanFilterKey>('all')
-  const [selectedId, setSelectedId] = useState<string>(INITIAL_PLANS[0].id)
+  const [selectedId, setSelectedId] = useState<string>('')
   const [expandedProc, setExpandedProc] = useState<string | null>(null)
   const [procModal, setProcModal] = useState<ProcModalState | null>(null)
   const [toothSel, setToothSel] = useState<number[]>([])
   const [moreOpen, setMoreOpen] = useState(false)
+  const [loadingPlans, setLoadingPlans] = useState(true)
+
+  const providerById = useMemo(() => new Map(providers.map((p) => [p.id, p])), [providers])
+  const coordinatorById = useMemo(() => new Map(coordinators.map((p) => [p.id, p])), [coordinators])
+  const insuranceById = useMemo(() => new Map(insuranceList.map((i) => [i.id, i])), [insuranceList])
+
+  const load = useCallback(async () => {
+    try {
+      setPlans(await api.plans())
+    } catch {
+      setPlans([])
+    } finally {
+      setLoadingPlans(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (ready) void load()
+  }, [ready, load])
+
+  useEffect(() => {
+    if (plans.length > 0 && !plans.some((p) => p.id === selectedId)) {
+      setSelectedId(plans[0].id)
+    }
+  }, [plans, selectedId])
+
+  const applyPlan = (p: TreatmentPlan | null) => {
+    if (!p) return
+    setPlans((prev) =>
+      prev.some((x) => x.id === p.id) ? prev.map((x) => (x.id === p.id ? p : x)) : [p, ...prev],
+    )
+  }
 
   const selectedPlan = useMemo(
     () => plans.find((p) => p.id === selectedId) ?? plans[0],
@@ -142,139 +171,108 @@ const TreatmentPlans = ({ searchQuery, createOpen, onCreateOpenChange }: Treatme
     [plans, filter, searchQuery],
   )
 
-  const updatePlan = (planId: string, updater: (p: TreatmentPlan) => TreatmentPlan) => {
-    setPlans((prev) => prev.map((p) => (p.id === planId ? updater(p) : p)))
+  const setProcStatus = async (pr: TreatmentProcedure, status: ProcedureStatus) => {
+    try {
+      const updated = await api.setProcedureStatus(pr.id, status)
+      applyPlan(updated)
+    } catch (err) {
+      toast.push(err instanceof Error ? err.message : 'Update failed', { tone: 'danger' })
+    }
   }
 
-  const updateProcedure = (
-    planId: string,
-    procId: string,
-    updater: (pr: TreatmentProcedure) => TreatmentProcedure,
-  ) => {
-    updatePlan(planId, (p) => ({
-      ...p,
-      updatedAt: AS_OF_DATE,
-      phases: p.phases.map((ph) => ({
-        ...ph,
-        procedures: ph.procedures.map((pr) => (pr.id === procId ? updater(pr) : pr)),
-      })),
-    }))
-  }
-
-  const setProcedureStatus = (procId: string, status: ProcedureStatus) => {
-    updateProcedure(selectedPlan.id, procId, (pr) => ({
-      ...pr,
-      status,
-      scheduledDate: status === 'scheduled' ? pr.scheduledDate ?? AS_OF_DATE : pr.scheduledDate,
-      completedDate: status === 'completed' ? pr.completedDate ?? AS_OF_DATE : pr.completedDate,
-    }))
-  }
-
-  const handleSchedule = (proc: TreatmentProcedure) => {
-    setProcedureStatus(proc.id, 'scheduled')
+  const handleSchedule = async (proc: TreatmentProcedure) => {
+    await setProcStatus(proc, 'scheduled')
     toast.push(`${proc.procedureName} marked as scheduled`)
   }
 
-  const handleComplete = (pr: TreatmentProcedure) => {
-    setProcedureStatus(pr.id, 'completed')
+  const handleComplete = async (pr: TreatmentProcedure) => {
+    await setProcStatus(pr, 'completed')
     toast.push(`${pr.procedureName} completed · plan progress updated`)
   }
 
-  const handleReturnPending = (pr: TreatmentProcedure) => {
-    setProcedureStatus(pr.id, 'planned')
+  const handleReturnPending = async (pr: TreatmentProcedure) => {
+    await setProcStatus(pr, 'planned')
     toast.push(`${pr.procedureName} returned to pending`, { tone: 'info' })
   }
 
-  const handleApprove = () => {
-    updatePlan(selectedPlan.id, (p) => ({ ...p, status: 'approved', updatedAt: AS_OF_DATE }))
-    toast.push(`${selectedPlan.title} approved · ready to schedule`)
-  }
-
-  const handleCreatePlan = (input: NewPlanInput) => {
-    const planId = uid('PLAN')
-    const phaseId = uid('PH')
-    const patient = PATIENTS.find((pt) => pt.id === input.patientId) ?? PATIENTS[0]
-    const newPlan: TreatmentPlan = {
-      id: planId,
-      title: input.title.trim() || 'Untitled Treatment Plan',
-      description: input.description.trim(),
-      status: input.startAsDraft ? 'draft' : 'pending_approval',
-      patient,
-      doctorId: 'DOC-01',
-      coordinatorId: 'COR-01',
-      insuranceId: 'INS-01',
-      createdAt: AS_OF_DATE,
-      updatedAt: AS_OF_DATE,
-      phases: [
-        {
-          id: phaseId,
-          planId,
-          name: 'Proposed Treatment',
-          order: 1,
-          description: 'Proposed procedures for this plan.',
-          procedures: [],
-        },
-      ],
+  const handleApprove = async () => {
+    if (!selectedPlan) return
+    try {
+      const updated = await api.updatePlan(selectedPlan.id, { status: 'approved' })
+      applyPlan(updated)
+      toast.push(`${selectedPlan.title} approved · ready to schedule`)
+    } catch (err) {
+      toast.push(err instanceof Error ? err.message : 'Approval failed', { tone: 'danger' })
     }
-    setPlans((prev) => [newPlan, ...prev])
-    setSelectedId(planId)
-    setFilter('all')
-    onCreateOpenChange(false)
-    toast.push(`Treatment plan created for ${patient.name} as ${input.startAsDraft ? 'draft' : 'pending approval'}`)
   }
 
-  const handleSaveProcedure = (phaseId: string, draft: ProcedureDraft) => {
+  const handleCreatePlan = async (input: NewPlanInput) => {
+    if (!input.patientId) {
+      toast.push('Select a patient', { tone: 'warning' })
+      return
+    }
+    try {
+      const created = await api.createPlan({
+        patientId: input.patientId,
+        title: input.title.trim() || 'Untitled Treatment Plan',
+        description: input.description.trim(),
+        status: input.startAsDraft ? 'draft' : 'pending_approval',
+      })
+      setPlans((prev) => [created, ...prev.filter((p) => p.id !== created.id)])
+      setSelectedId(created.id)
+      setFilter('all')
+      onCreateOpenChange(false)
+      toast.push(
+        `Treatment plan created for ${created.patient.name} as ${input.startAsDraft ? 'draft' : 'pending approval'}`,
+      )
+    } catch (err) {
+      toast.push(err instanceof Error ? err.message : 'Failed to create plan', { tone: 'danger' })
+    }
+  }
+
+  const handleSaveProcedure = async (phaseId: string, draft: ProcedureDraft) => {
     if (!procModal) return
     if (!draft.procedureName.trim()) {
       toast.push('Procedure name is required', { tone: 'warning' })
       return
     }
-    const patientResponsibility = Math.max(0, draft.fee - draft.insuranceEstimate)
-    if (procModal.mode === 'edit' && procModal.existing) {
-      updateProcedure(selectedPlan.id, procModal.existing.id, (pr) => ({
-        ...pr,
-        procedureName: draft.procedureName.trim(),
-        code: draft.code.trim(),
-        category: draft.category,
-        toothSelection: { numbering: 'universal', teeth: draft.teeth },
-        providerId: draft.providerId,
-        fee: draft.fee,
-        insuranceEstimate: draft.insuranceEstimate,
-        patientResponsibility,
-        plannedDate: draft.plannedDate || pr.plannedDate,
-        notes: draft.notes,
-      }))
-      toast.push('Procedure updated')
-    } else {
-      const procId = uid('PR')
-      const newProc: TreatmentProcedure = {
-        id: procId,
-        planId: selectedPlan.id,
-        phaseId,
-        procedureName: draft.procedureName.trim(),
-        code: draft.code.trim(),
-        category: draft.category,
-        toothSelection: { numbering: 'universal', teeth: draft.teeth },
-        providerId: draft.providerId,
-        status: 'planned',
-        plannedDate: draft.plannedDate || AS_OF_DATE,
-        scheduledDate: null,
-        completedDate: null,
-        fee: draft.fee,
-        insuranceEstimate: draft.insuranceEstimate,
-        patientResponsibility,
-        notes: draft.notes,
+    try {
+      if (procModal.mode === 'edit' && procModal.existing) {
+        const updated = await api.updateProcedure(procModal.existing.id, {
+          procedureName: draft.procedureName.trim(),
+          code: draft.code.trim(),
+          category: draft.category,
+          teeth: draft.teeth,
+          providerId: draft.providerId,
+          fee: draft.fee,
+          insuranceEstimate: draft.insuranceEstimate,
+          plannedDate: draft.plannedDate || null,
+          notes: draft.notes,
+        })
+        applyPlan(updated)
+        toast.push('Procedure updated')
+      } else {
+        const updated = await api.createProcedure(selectedPlan.id, {
+          phaseId,
+          procedureName: draft.procedureName.trim(),
+          code: draft.code.trim(),
+          category: draft.category,
+          teeth: draft.teeth,
+          providerId: draft.providerId,
+          fee: draft.fee,
+          insuranceEstimate: draft.insuranceEstimate,
+          plannedDate: draft.plannedDate || null,
+          notes: draft.notes,
+        })
+        applyPlan(updated)
+        toast.push(
+          `${draft.procedureName} added to plan · ${currencyWhole(planFinancials(selectedPlan).estimatedValue + draft.fee)} in plan value`,
+        )
       }
-      updatePlan(selectedPlan.id, (p) => ({
-        ...p,
-        updatedAt: AS_OF_DATE,
-        phases: p.phases.map((ph) => (ph.id === phaseId ? { ...ph, procedures: [...ph.procedures, newProc] } : ph)),
-      }))
-      setExpandedProc(procId)
-      const nextValue = planFinancials(selectedPlan).estimatedValue + draft.fee
-      toast.push(`${newProc.procedureName} added to plan · ${currencyWhole(nextValue)} in plan value`)
+      setProcModal(null)
+    } catch (err) {
+      toast.push(err instanceof Error ? err.message : 'Failed to save procedure', { tone: 'danger' })
     }
-    setProcModal(null)
   }
 
   const handleToothClick = (tooth: number) => {
@@ -286,10 +284,25 @@ const TreatmentPlans = ({ searchQuery, createOpen, onCreateOpenChange }: Treatme
   }
 
   const plan = selectedPlan
-  const fin = planFinancials(plan)
-  const insurance = plan.insuranceId ? INSURANCE_BY_ID.get(plan.insuranceId) : undefined
+  const fin = useMemo(
+    () =>
+      plan
+        ? planFinancials(plan)
+        : {
+            estimatedValue: 0,
+            insuranceContribution: 0,
+            patientShare: 0,
+            completedCount: 0,
+            totalCount: 0,
+            coveragePercent: 0,
+            progressPercent: 0,
+          },
+    [plan],
+  )
+  const insurance = plan?.insuranceId ? insuranceById.get(plan.insuranceId) : undefined
 
   const mapData = useMemo(() => {
+    if (!plan) return { completed: [], planned: [] }
     const completedSet = new Set<number>()
     const plannedSet = new Set<number>()
     for (const pr of planProcedures(plan)) {
@@ -302,6 +315,7 @@ const TreatmentPlans = ({ searchQuery, createOpen, onCreateOpenChange }: Treatme
   }, [plan])
 
   const selectedProcs = useMemo(() => {
+    if (!plan) return []
     const result: { tooth: number; procedures: TreatmentProcedure[] }[] = []
     for (const tooth of toothSel) {
       const procs = planProcedures(plan).filter((pr) => pr.toothSelection.teeth.includes(tooth))
@@ -310,11 +324,28 @@ const TreatmentPlans = ({ searchQuery, createOpen, onCreateOpenChange }: Treatme
     return result
   }, [plan, toothSel])
 
-  const recentPlans = RECENTLY_UPDATED.map((id) => plans.find((p) => p.id === id)).filter(
-    (p): p is TreatmentPlan => Boolean(p),
+  const recentPlans = useMemo(
+    () =>
+      [...plans]
+        .sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))
+        .slice(0, 4),
+    [plans],
   )
 
-  const pendingProcedures = planProcedures(plan).filter((pr) => pr.status === 'planned' || pr.status === 'pending')
+  const pendingProcedures = plan
+    ? planProcedures(plan).filter((pr) => pr.status === 'planned' || pr.status === 'pending')
+    : []
+
+  if (!plan) {
+    return (
+      <div className="tp-page">
+        <div className="ui-empty" style={{ padding: 60 }}>
+          <strong>{loadingPlans ? 'Loading treatment plans…' : 'No treatment plans yet'}</strong>
+          <span>Create your first plan with the New Plan button.</span>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="tp-page">
@@ -429,9 +460,9 @@ const TreatmentPlans = ({ searchQuery, createOpen, onCreateOpenChange }: Treatme
               </div>
               <div className="tp-meta-cell">
                 <span className="tp-meta-label">Attending Doctor</span>
-                <span className="tp-meta-value">{PROVIDER_BY_ID.get(plan.doctorId)?.name ?? '—'}</span>
+                <span className="tp-meta-value">{providerById.get(plan.doctorId)?.name ?? '—'}</span>
                 <span className="tp-meta-label">Coordinator</span>
-                <span className="tp-meta-value">{COORDINATOR_BY_ID.get(plan.coordinatorId)?.name ?? '—'}</span>
+                <span className="tp-meta-value">{coordinatorById.get(plan.coordinatorId)?.name ?? '—'}</span>
               </div>
               <div className="tp-meta-cell">
                 <span className="tp-meta-label">Updated</span>
@@ -522,6 +553,7 @@ const TreatmentPlans = ({ searchQuery, createOpen, onCreateOpenChange }: Treatme
                     <ProcedureRow
                       key={pr.id}
                       procedure={pr}
+                      providerName={providerById.get(pr.providerId)?.name ?? '—'}
                       expanded={expandedProc === pr.id}
                       onToggle={() => setExpandedProc((cur) => (cur === pr.id ? null : pr.id))}
                       onEdit={() =>
@@ -577,14 +609,14 @@ const TreatmentPlans = ({ searchQuery, createOpen, onCreateOpenChange }: Treatme
           plan={plan}
           financials={fin}
           insurance={insurance}
-          onToggleTask={(taskId) =>
-            updatePlan(plan.id, (p) => ({
-              ...p,
-              careTasks: (p.careTasks ?? DEFAULT_TASKS).map((t) =>
-                t.id === taskId ? { ...t, done: !t.done } : t,
-              ),
-            }))
-          }
+          onToggleTask={async (taskId) => {
+            try {
+              const updated = await api.toggleCareTask(taskId)
+              applyPlan(updated)
+            } catch (err) {
+              toast.push(err instanceof Error ? err.message : 'Task update failed', { tone: 'danger' })
+            }
+          }}
           onSend={() =>
             toast.push(`Treatment plan shared with ${plan.patient.name} via secure messaging`)
           }
@@ -630,6 +662,7 @@ const TreatmentPlans = ({ searchQuery, createOpen, onCreateOpenChange }: Treatme
 
       {createOpen && (
         <CreatePlanModal
+          patients={patients}
           onClose={() => onCreateOpenChange(false)}
           onCreate={handleCreatePlan}
         />
@@ -643,9 +676,11 @@ const TreatmentPlans = ({ searchQuery, createOpen, onCreateOpenChange }: Treatme
           phaseId={procModal.phaseId}
           existing={procModal.existing}
           coveragePct={fin.coveragePercent}
+          catalog={catalog}
+          providers={providers}
           onClose={() => setProcModal(null)}
           onSave={(draft) => {
-            if (procModal.phaseId) handleSaveProcedure(procModal.phaseId, draft)
+            if (procModal.phaseId) void handleSaveProcedure(procModal.phaseId, draft)
           }}
         />
       )}
@@ -735,6 +770,7 @@ function PlanBrowser({ plans, filter, onFilter, selectedId, onSelect }: PlanBrow
 
 interface ProcedureRowProps {
   procedure: TreatmentProcedure
+  providerName: string
   expanded: boolean
   onToggle: () => void
   onEdit: () => void
@@ -745,6 +781,7 @@ interface ProcedureRowProps {
 
 function ProcedureRow({
   procedure: pr,
+  providerName,
   expanded,
   onToggle,
   onEdit,
@@ -752,7 +789,6 @@ function ProcedureRow({
   onComplete,
   onReturnPending,
 }: ProcedureRowProps) {
-  const provider = PROVIDER_BY_ID.get(pr.providerId)
   const teeth = pr.toothSelection.teeth.length > 0 ? pr.toothSelection.teeth.join(', ') : 'None'
 
   return (
@@ -774,7 +810,7 @@ function ProcedureRow({
         <div className="tp-proc-detail">
           <div className="tp-proc-grid">
             <DetailCell label="Category" value={pr.category} />
-            <DetailCell label="Provider" value={provider?.name ?? '—'} />
+            <DetailCell label="Provider" value={providerName} />
             <DetailCell label="Teeth" value={teeth} />
             <DetailCell label="Planned date" value={pr.plannedDate ? dateShort(pr.plannedDate) : '—'} />
             <DetailCell label="Scheduled date" value={pr.scheduledDate ? dateShort(pr.scheduledDate) : '—'} />
@@ -836,7 +872,7 @@ function DetailCell({ label, value, strong }: { label: string; value: string; st
 interface FinancialSidebarProps {
   plan: TreatmentPlan
   financials: ReturnType<typeof planFinancials>
-  insurance?: ReturnType<typeof INSURANCE_BY_ID.get>
+  insurance?: InsuranceBenefit
   onToggleTask: (taskId: string) => void
   onSend: () => void
   onExport: () => void
@@ -988,7 +1024,7 @@ function FinancialSidebar({
   )
 }
 
-function BenefitPill({ preAuth }: { preAuth: NonNullable<ReturnType<typeof INSURANCE_BY_ID.get>>['preAuthStatus'] }) {
+function BenefitPill({ preAuth }: { preAuth: PreAuthStatus }) {
   if (preAuth === 'approved')
     return (
       <span className="ui-pill ui-pill-green">
@@ -1010,7 +1046,7 @@ function BenefitPill({ preAuth }: { preAuth: NonNullable<ReturnType<typeof INSUR
   return <span className="ui-pill ui-pill-slate">Not required</span>
 }
 
-function EligibilityPill({ eligibility }: { eligibility: NonNullable<ReturnType<typeof INSURANCE_BY_ID.get>>['eligibilityStatus'] }) {
+function EligibilityPill({ eligibility }: { eligibility: EligibilityStatus }) {
   if (eligibility === 'verified')
     return (
       <span className="ui-pill ui-pill-green">
@@ -1056,6 +1092,8 @@ interface ProcedureModalProps {
   phaseId: string | undefined
   existing?: TreatmentProcedure
   coveragePct: number
+  catalog: ProcedureCatalogEntry[]
+  providers: { id: string; name: string; role: string; title: string }[]
   onClose: () => void
   onSave: (draft: ProcedureDraft) => void
 }
@@ -1072,7 +1110,7 @@ const CATEGORY_OPTIONS: TreatmentCategory[] = [
   'Cosmetic',
 ]
 
-function ProcedureModal({ mode, plan, existing, coveragePct, onClose, onSave }: ProcedureModalProps) {
+function ProcedureModal({ mode, plan, existing, coveragePct, catalog, providers, onClose, onSave }: ProcedureModalProps) {
   const [search, setSearch] = useState('')
   const [name, setName] = useState(existing?.procedureName ?? '')
   const [code, setCode] = useState(existing?.code ?? '')
@@ -1089,13 +1127,13 @@ function ProcedureModal({ mode, plan, existing, coveragePct, onClose, onSave }: 
   const query = search.trim().toLowerCase()
   const results = useMemo(
     () =>
-      PROCEDURE_CATALOG.filter(
+      catalog.filter(
         (c) =>
           !query ||
           c.name.toLowerCase().includes(query) ||
           c.code.toLowerCase().includes(query),
       ).slice(0, 6),
-    [query],
+    [query, catalog],
   )
 
   const pickCatalog = (entry: ProcedureCatalogEntry) => {
@@ -1229,7 +1267,7 @@ function ProcedureModal({ mode, plan, existing, coveragePct, onClose, onSave }: 
             value={provider}
             onChange={(e) => setProvider(e.target.value)}
           >
-            {PROVIDERS.map((p) => (
+            {providers.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
               </option>
@@ -1353,8 +1391,16 @@ interface NewPlanInput {
   startAsDraft: boolean
 }
 
-function CreatePlanModal({ onClose, onCreate }: { onClose: () => void; onCreate: (input: NewPlanInput) => void }) {
-  const [patientId, setPatientId] = useState(PATIENTS[0].id)
+function CreatePlanModal({
+  patients,
+  onClose,
+  onCreate,
+}: {
+  patients: { id: string; name: string }[]
+  onClose: () => void
+  onCreate: (input: NewPlanInput) => void
+}) {
+  const [patientId, setPatientId] = useState(patients[0]?.id ?? '')
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [startAsDraft, setStartAsDraft] = useState(true)
@@ -1392,7 +1438,7 @@ function CreatePlanModal({ onClose, onCreate }: { onClose: () => void; onCreate:
             value={patientId}
             onChange={(e) => setPatientId(e.target.value)}
           >
-            {PATIENTS.map((p) => (
+            {patients.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name} · {p.id}
               </option>

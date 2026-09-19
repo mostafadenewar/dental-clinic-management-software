@@ -1,74 +1,96 @@
-import { app, ipcMain, BrowserWindow } from "electron";
-import { fileURLToPath } from "node:url";
-import path from "node:path";
-app.disableHardwareAcceleration();
-const electronDirectory = path.dirname(fileURLToPath(import.meta.url));
-process.env.APP_ROOT = path.join(electronDirectory, "..");
-const VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
-const MAIN_DIST = path.join(process.env.APP_ROOT, "dist-electron");
-const RENDERER_DIST = path.join(process.env.APP_ROOT, "dist");
-process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, "public") : RENDERER_DIST;
-let applicationWindow;
-const DEFAULT_WINDOW_WIDTH = 1920;
-const DEFAULT_WINDOW_HEIGHT = 1080;
-const MIN_WINDOW_WIDTH = 1500;
-const MIN_WINDOW_HEIGHT = 1050;
-function createWindow() {
-  applicationWindow = new BrowserWindow({
-    width: DEFAULT_WINDOW_WIDTH,
-    height: DEFAULT_WINDOW_HEIGHT,
-    minWidth: MIN_WINDOW_WIDTH,
-    minHeight: MIN_WINDOW_HEIGHT,
-    frame: false,
-    show: false,
-    backgroundColor: "#f8fafc",
-    icon: path.join(process.env.VITE_PUBLIC, "electron-vite.svg"),
-    webPreferences: {
-      backgroundThrottling: false,
-      nodeIntegration: false,
-      contextIsolation: true,
-      preload: path.join(electronDirectory, "preload.mjs")
+import { app as t, ipcMain as f, BrowserWindow as _ } from "electron";
+import { spawn as D } from "node:child_process";
+import { existsSync as E } from "node:fs";
+import { fileURLToPath as P } from "node:url";
+import n from "node:path";
+import T from "node:readline";
+t.disableHardwareAcceleration();
+const a = n.dirname(P(import.meta.url));
+process.env.APP_ROOT = n.join(a, "..");
+const m = process.env.VITE_DEV_SERVER_URL, y = n.join(process.env.APP_ROOT, "dist-electron"), h = n.join(process.env.APP_ROOT, "dist");
+process.env.VITE_PUBLIC = m ? n.join(process.env.APP_ROOT, "public") : h;
+let e, r = null, d = "";
+const R = 1920, g = 1080, k = 1500, w = 1050;
+function v() {
+  const l = [
+    n.join(a, "..", "backend"),
+    n.join(process.resourcesPath ?? "", "backend")
+  ];
+  for (const c of l)
+    if (c && E(n.join(c, "server.py"))) return c;
+  return n.join(a, "..", "backend");
+}
+function O() {
+  var u;
+  const l = v(), c = process.env.DCMS_PYTHON ?? "python", I = t.isPackaged ? n.join(t.getPath("userData"), "data", "dental_clinic.db") : n.join(l, "data", "dental_clinic.db"), s = D(c, ["server.py", "--port", "0"], {
+    cwd: l,
+    windowsHide: !0,
+    stdio: ["ignore", "pipe", "pipe"],
+    env: {
+      ...process.env,
+      DCMS_DB: I,
+      PYTHONUNBUFFERED: "1"
     }
   });
-  applicationWindow.once("ready-to-show", () => {
-    applicationWindow == null ? void 0 : applicationWindow.show();
+  r = s, T.createInterface({ input: s.stdout }).on("line", (o) => {
+    const i = o.trim().match(/^DCMS_BACKEND_PORT=(\d+)$/);
+    i && (d = `http://127.0.0.1:${i[1]}`, e == null || e.webContents.send("backend-url", d));
+  }), (u = s.stderr) == null || u.on("data", (o) => {
+    console.error(`[dcms] backend: ${o.toString().trimEnd()}`);
+  }), s.on("error", (o) => {
+    console.error("[dcms] failed to start Python backend:", o.message);
+  }), s.on("exit", (o, i) => {
+    r === s && (r = null, d = ""), o !== 0 && i !== "SIGTERM" && console.error(`[dcms] backend exited unexpectedly (code=${o ?? "null"}, signal=${i ?? "null"})`);
   });
-  applicationWindow.webContents.on("did-finish-load", () => {
-    applicationWindow == null ? void 0 : applicationWindow.webContents.send("main-process-message", (/* @__PURE__ */ new Date()).toLocaleString());
-  });
-  if (VITE_DEV_SERVER_URL) {
-    applicationWindow.loadURL(VITE_DEV_SERVER_URL);
-  } else {
-    applicationWindow.loadFile(path.join(RENDERER_DIST, "index.html"));
-  }
 }
-ipcMain.on("window-minimize", () => {
-  applicationWindow == null ? void 0 : applicationWindow.minimize();
+function j() {
+  r && !r.killed && (r.kill(), r = null);
+}
+function b() {
+  e = new _({
+    width: R,
+    height: g,
+    minWidth: k,
+    minHeight: w,
+    frame: !1,
+    show: !1,
+    backgroundColor: "#f8fafc",
+    icon: n.join(process.env.VITE_PUBLIC, "electron-vite.svg"),
+    webPreferences: {
+      backgroundThrottling: !1,
+      nodeIntegration: !1,
+      contextIsolation: !0,
+      preload: n.join(a, "preload.mjs")
+    }
+  }), e.once("ready-to-show", () => {
+    e == null || e.show();
+  }), e.webContents.on("did-finish-load", () => {
+    e == null || e.webContents.send("main-process-message", (/* @__PURE__ */ new Date()).toLocaleString()), d && (e == null || e.webContents.send("backend-url", d));
+  }), m ? e.loadURL(m) : e.loadFile(n.join(h, "index.html"));
+}
+f.on("window-minimize", () => {
+  e == null || e.minimize();
 });
-ipcMain.on("window-toggle-maximize", () => {
-  if (applicationWindow == null ? void 0 : applicationWindow.isMaximized()) {
-    applicationWindow.unmaximize();
-  } else {
-    applicationWindow == null ? void 0 : applicationWindow.maximize();
-  }
+f.on("window-toggle-maximize", () => {
+  e != null && e.isMaximized() ? e.unmaximize() : e == null || e.maximize();
 });
-ipcMain.on("window-close", () => {
-  applicationWindow == null ? void 0 : applicationWindow.close();
+f.on("window-close", () => {
+  e == null || e.close();
 });
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    app.quit();
-    applicationWindow = null;
-  }
+t.on("window-all-closed", () => {
+  process.platform !== "darwin" && (t.quit(), e = null);
 });
-app.on("activate", () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow();
-  }
+t.on("activate", () => {
+  _.getAllWindows().length === 0 && b();
 });
-app.whenReady().then(createWindow);
+t.on("will-quit", () => {
+  j();
+});
+t.whenReady().then(() => {
+  O(), b();
+});
 export {
-  MAIN_DIST,
-  RENDERER_DIST,
-  VITE_DEV_SERVER_URL
+  y as MAIN_DIST,
+  h as RENDERER_DIST,
+  m as VITE_DEV_SERVER_URL
 };

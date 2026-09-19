@@ -24,4 +24,9 @@ declare namespace NodeJS {
 // Used in Renderer process, expose in `preload.ts`
 interface Window {
   ipcRenderer: import('electron').IpcRenderer
+  /** Backend bridge exposed by preload.ts */
+  dcms: {
+    /** Subscribe to the backend base URL pushed by the main process. */
+    onBackendUrl(callback: (url: string) => void): () => void
+  }
 }
