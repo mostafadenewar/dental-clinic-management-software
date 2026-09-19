@@ -1,20 +1,12 @@
 import { useState } from 'react'
-import {
-  MagnifyingGlass,
-  Bell,
-  CaretDown,
-  CaretLeft,
-  CaretRight,
-  CalendarBlank,
-  Plus,
-} from '@phosphor-icons/react'
+import { MagnifyingGlass, Bell, CaretDown, Plus } from '@phosphor-icons/react'
 import './header.css'
 import type { PageKey } from '../App'
 
 const PAGE_META: Record<PageKey, { title: string; subtitle: string }> = {
   dashboard: { title: 'Dashboard', subtitle: new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) },
   patients: { title: 'Patients', subtitle: '· 1,284 total records' },
-  appointments: { title: 'Appointments', subtitle: 'May 26 – June 01, 2026' },
+  appointments: { title: 'Appointments', subtitle: '· Day schedule' },
   treatment: { title: 'Treatment Plans', subtitle: '· 12 active plans' },
   billing: { title: 'Billing', subtitle: '· $12,480 outstanding' },
   inventory: { title: 'Inventory', subtitle: '· 4 low stock items' },
@@ -51,16 +43,7 @@ const Header = ({ page, searchValue, onSearchChange, primaryAction }: HeaderProp
     <header className={`header${page === 'dashboard' ? ' header-dashboard' : ''}`}>
       <div className="header-left">
         <h1>{meta.title}</h1>
-        {page === 'appointments' ? (
-          <div className="header-date">
-            <CaretLeft size={12} weight="bold" />
-            <CalendarBlank size={14} />
-            <span>{meta.subtitle}</span>
-            <CaretRight size={12} weight="bold" />
-          </div>
-        ) : (
-          <h3>{meta.subtitle}</h3>
-        )}
+        <h3>{meta.subtitle}</h3>
       </div>
 
       <div className="header-actions">
