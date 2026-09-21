@@ -118,23 +118,58 @@
   background: #e2e8f0;
 }
 
-.odo-type-legend {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
+/* --- occlusal chart ------------------------------------------------------ */
+
+.occlusal-svg {
+  background: #f8f9fb;
 }
 
-.odo-tg {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: #64748b;
-  font-size: 10px;
+.occlusal-tooth .odo-glyph {
+  transform-origin: 50% 50%;
+  transform-box: fill-box;
+  transition: transform 130ms ease, filter 130ms ease;
 }
 
-.odo-glyph-mini {
-  width: 16px;
-  height: 26px;
-  display: inline-block;
-  vertical-align: middle;
+.occlusal-tooth.clickable:hover .odo-glyph {
+  transform: scale(1.12);
+  filter: drop-shadow(0 2px 6px rgba(37, 99, 235, 0.3));
+}
+
+.occlusal-tooth.selected .odo-glyph {
+  transform: scale(1.08);
+}
+
+.occlusal-tooth.clickable:focus-visible .odo-glyph {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* --- panoramic chart ----------------------------------------------------- */
+
+.panoramic-svg {
+  background: #fdfdfd;
+}
+
+.pan-tooth {
+  cursor: default;
+  outline: none;
+}
+
+.pan-tooth.clickable {
+  cursor: pointer;
+}
+
+.pan-tooth.clickable:hover {
+  filter: drop-shadow(0 2px 6px rgba(37, 99, 235, 0.3));
+}
+
+.pan-tooth.selected {
+  filter: drop-shadow(0 0 4px rgba(37, 99, 235, 0.4));
+}
+
+.pan-tooth.clickable:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+  border-radius: 4px;
 }
