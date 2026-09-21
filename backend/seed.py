@@ -7,9 +7,10 @@ from datetime import timedelta
 
 from db import iso, today
 from seed_billing import seed_billing
-from seed_catalog import seed_activity, seed_catalog
+from seed_catalog import seed_activity, seed_catalog, seed_notifications
 from seed_inventory import seed_inventory
 from seed_treatment import seed_treatment
+from views_auth import hash_password
 
 # ---------------------------------------------------------------------------
 # Reference / lookups
@@ -27,11 +28,11 @@ COORDINATORS = [
     ("COR-02", "Luke Adams", "Insurance Coordinator", ""),
 ]
 
-# id, username, display name, role
+# id, username, display name, role, password, title, email, phone
 USERS = [
-    ("USR-001", "admin", "Clinic Admin", "admin"),
-    ("USR-002", "dr.smith", "Dr. Smith", "dentist"),
-    ("USR-003", "front", "Maya Gomez", "front_desk"),
+    ("USR-001", "admin", "Clinic Admin", "admin", "admin123", "Practice Administrator", "admin@dentalclinic.local", "+1 (555) 000-1111"),
+    ("USR-002", "dr.smith", "Dr. Smith", "dentist", "smith123", "Lead Dentist", "dr.smith@dentalclinic.local", "+1 (555) 000-2222"),
+    ("USR-003", "front", "Maya Gomez", "front_desk", "front123", "Treatment Coordinator", "maya@dentalclinic.local", "+1 (555) 000-3333"),
 ]
 
 # id, carrier, policy_number, notes  (insurance is optional, informational only)
@@ -68,7 +69,14 @@ def seed_coordinators(conn: sqlite3.Connection) -> None:
 
 
 def seed_users(conn: sqlite3.Connection) -> None:
-    conn.executemany("INSERT OR IGNORE INTO users VALUES (?,?,?,?,1)", USERS)
+    # Store hashed passwords, never the plaintext demo values.
+    rows = [(u[0], u[1], u[2], u[3], hash_password(u[4]), u[5], u[6], u[7]) for u in USERS]
+    conn.executemany(
+        "INSERT OR IGNORE INTO users "
+        "(id, username, name, role, password_hash, title, email, phone) "
+        "VALUES (?,?,?,?,?,?,?,?)",
+        rows,
+    )
 
 
 def seed_insurance(conn: sqlite3.Connection) -> None:
@@ -143,4 +151,5 @@ def seed_all(conn: sqlite3.Connection) -> None:
     seed_inventory(conn)
     seed_catalog(conn)
     seed_activity(conn)
+    seed_notifications(conn)
     conn.commit()

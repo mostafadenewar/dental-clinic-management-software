@@ -67,7 +67,19 @@ CREATE TABLE IF NOT EXISTS appointments (
 );
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, name TEXT NOT NULL,
-  role TEXT NOT NULL DEFAULT 'staff', active INTEGER NOT NULL DEFAULT 1
+  role TEXT NOT NULL DEFAULT 'staff', active INTEGER NOT NULL DEFAULT 1,
+  password_hash TEXT NOT NULL DEFAULT '',
+  email TEXT NOT NULL DEFAULT '', phone TEXT NOT NULL DEFAULT '',
+  title TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS sessions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, token TEXT UNIQUE NOT NULL,
+  user_id TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS notifications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL DEFAULT 'general',
+  message TEXT NOT NULL, at TEXT NOT NULL, read INTEGER NOT NULL DEFAULT 0,
+  ref_id TEXT NOT NULL DEFAULT '', UNIQUE(kind, ref_id)
 );
 CREATE TABLE IF NOT EXISTS treatment_plans (
   id TEXT PRIMARY KEY, patient_id TEXT NOT NULL, name TEXT NOT NULL,
@@ -147,7 +159,8 @@ CREATE TABLE IF NOT EXISTS procedure_catalog (
 # destructive version bump keeps things simple and correct).
 TABLE_NAMES = [
     "providers", "coordinators", "insurance", "patients",
-    "appointments", "users", "treatment_plans", "plan_phases",
+    "appointments", "users", "sessions", "notifications",
+    "treatment_plans", "plan_phases",
     "plan_procedures", "care_tasks", "insurance_benefits", "treatment_templates",
     "treatment_procedures", "patient_payments", "expenses", "invoices",
     "invoice_line_items", "invoice_payments", "payments", "insurance_claims",
@@ -155,7 +168,7 @@ TABLE_NAMES = [
     "supplier_orders", "supplier_order_lines", "activity_log", "procedure_catalog",
 ]
 
-SCHEMA_VERSION = "4"
+SCHEMA_VERSION = "5"
 
 
 def init_db() -> None:

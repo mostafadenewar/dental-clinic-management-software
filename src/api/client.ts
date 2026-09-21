@@ -55,12 +55,47 @@ export function onBackendReady(fn: () => void): () => void {
 
 export const getBaseUrl = (): string => baseUrl
 
+// ---------------------------------------------------------------------------
+// Session token handling. The token is kept in localStorage so a reload stays
+// logged in, and attached to every API call as a Bearer token.
+// ---------------------------------------------------------------------------
+
+const TOKEN_KEY = 'dcms_token'
+
+let authToken: string | null = localStorage.getItem(TOKEN_KEY)
+
+export function setAuthToken(token: string | null): void {
+  authToken = token
+  if (token) localStorage.setItem(TOKEN_KEY, token)
+  else localStorage.removeItem(TOKEN_KEY)
+}
+
+export const getAuthToken = (): string | null => authToken
+
+const authFailureListeners = new Set<() => void>()
+
+/** Subscribe to session expiration (HTTP 401); the app should show the login screen. */
+export function onAuthFailure(cb: () => void): () => void {
+  authFailureListeners.add(cb)
+  return () => authFailureListeners.delete(cb)
+}
+
+function notifyAuthFailure(): void {
+  authFailureListeners.forEach((fn) => fn())
+}
+
 export async function apiFetch<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const headers: Record<string, string> = {}
+  if (body !== undefined) headers['Content-Type'] = 'application/json'
+  if (authToken) headers.Authorization = `Bearer ${authToken}`
   const res = await fetch(`${baseUrl}${path}`, {
     method,
-    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    headers,
     body: body === undefined ? undefined : JSON.stringify(body),
   })
+  if (res.status === 401) {
+    notifyAuthFailure()
+  }
   if (!res.ok) {
     let message = `HTTP ${res.status}`
     try {
@@ -190,6 +225,33 @@ export interface ProcedureCatalogEntry {
   name: string
   category: TreatmentCategory
   defaultFee: number
+}
+
+export interface AuthUser {
+  id: string
+  username: string
+  name: string
+  role: string
+  active: boolean
+  email: string
+  phone: string
+  title: string
+}
+
+export type NotificationKind = 'system' | 'appointment' | 'stock' | 'billing' | 'patient' | 'general'
+
+export interface NotificationRecord {
+  id: number
+  kind: NotificationKind
+  message: string
+  at: string
+  read: boolean
+}
+
+export interface BackupEntry {
+  name: string
+  size: number
+  createdAt: string
 }
 
 // Mapping helpers ------------------------------------------------------------
@@ -411,6 +473,40 @@ export const api = {
       policyNumber: string
       notes: string
     }>>('GET', '/api/insurance').then((rows) => rows.map(toInsurancePlan)),
+
+  auth: {
+    login: (username: string, password: string) =>
+      apiFetch<{ token: string; user: AuthUser }>('POST', '/api/auth/login', { username, password }),
+    logout: () => apiFetch<{ ok: true }>('POST', '/api/auth/logout'),
+    me: () => apiFetch<AuthUser>('GET', '/api/auth/me'),
+    updateProfile: (data: object) => apiFetch<AuthUser>('PATCH', '/api/auth/profile', data),
+    changePassword: (currentPassword: string, newPassword: string, confirmPassword: string) =>
+      apiFetch<{ ok: true }>('POST', '/api/auth/password', {
+        currentPassword,
+        newPassword,
+        confirmPassword,
+      }),
+  },
+
+  notifications: {
+    list: () =>
+      apiFetch<{ notifications: NotificationRecord[]; unread: number }>('GET', '/api/notifications'),
+    unread: () => apiFetch<{ count: number }>('GET', '/api/notifications/unread'),
+    markRead: (id: number) =>
+      apiFetch<{ unread: number }>('POST', `/api/notifications/${id}/read`),
+    markAllRead: () =>
+      apiFetch<{ ok: true }>('POST', '/api/notifications/read-all'),
+  },
+
+  backups: {
+    list: () =>
+      apiFetch<{ dir: string; backups: BackupEntry[] }>('GET', '/api/backups'),
+    create: () => apiFetch<BackupEntry>('POST', '/api/backups'),
+    restore: (name: string) =>
+      apiFetch<{ ok: true; name: string }>('POST', `/api/backups/${encodeURIComponent(name)}/restore`),
+    delete: (name: string) =>
+      apiFetch<{ ok: true; name: string }>('DELETE', `/api/backups/${encodeURIComponent(name)}`),
+  },
 
   mapInvoice: toInvoice,
 }

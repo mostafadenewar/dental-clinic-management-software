@@ -43,9 +43,23 @@ ACTIVITIES = [
     ("payment", "Payment recorded from James Carter", 300),
 ]
 
+NOTIFICATIONS = [
+    ("system", "welcome", "Welcome to DCMS — this is your in-app notification center."),
+    ("system", "backup-hint", "Set up routine database backups from Settings to protect practice data."),
+]
+
 
 def seed_catalog(conn: sqlite3.Connection) -> None:
     conn.executemany("INSERT OR IGNORE INTO procedure_catalog VALUES (?,?,?,?)", CATALOG)
+
+
+def seed_notifications(conn: sqlite3.Connection) -> None:
+    for kind, ref_id, message in NOTIFICATIONS:
+        conn.execute(
+            "INSERT OR IGNORE INTO notifications (kind, message, at, read, ref_id) "
+            "VALUES (?,?,?,0,?)",
+            (kind, message, now_iso(), ref_id),
+        )
 
 
 def seed_activity(conn: sqlite3.Connection) -> None:

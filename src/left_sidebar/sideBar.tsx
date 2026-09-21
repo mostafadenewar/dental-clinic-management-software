@@ -27,17 +27,24 @@ const NAV: NavItem[] = [
   { key: 'inventory', icon: <Tray size={15} /> },
 ]
 
-const SYSTEM: NavItem[] = [
-  { key: 'dashboard', icon: <GearSix size={15} /> },
-  { key: 'dashboard', icon: <SignOut size={15} /> },
+interface SystemItem {
+  key: 'settings' | 'logout'
+  icon: ReactNode
+  label: string
+}
+
+const SYSTEM: SystemItem[] = [
+  { key: 'settings', icon: <GearSix size={15} />, label: 'Settings' },
+  { key: 'logout', icon: <SignOut size={15} />, label: 'Sign out' },
 ]
 
 interface SideBarProps {
   current: PageKey
   onNavigate: (page: PageKey) => void
+  onLogout?: () => void
 }
 
-const SideBar = ({ current, onNavigate }: SideBarProps) => {
+const SideBar = ({ current, onNavigate, onLogout }: SideBarProps) => {
   return (
     <nav className="sidebar">
       <button
@@ -70,12 +77,24 @@ const SideBar = ({ current, onNavigate }: SideBarProps) => {
       </div>
 
       <div className="sidebar-system">
-        {SYSTEM.map((item, index) => (
-          <button key={index} type="button" className="sidebar-item" onClick={() => onNavigate('dashboard')}>
-            <span className="sidebar-item-bar" />
-            <span className="sidebar-item-icon">{item.icon}</span>
-          </button>
-        ))}
+        {SYSTEM.map((item) => {
+          const active = item.key === 'settings' && current === 'settings'
+          return (
+            <button
+              key={item.key}
+              type="button"
+              title={item.label}
+              className={`sidebar-item${active ? ' active' : ''}`}
+              onClick={() => {
+                if (item.key === 'settings') onNavigate('settings')
+                else onLogout?.()
+              }}
+            >
+              <span className="sidebar-item-bar" />
+              <span className="sidebar-item-icon">{item.icon}</span>
+            </button>
+          )
+        })}
       </div>
     </nav>
   )

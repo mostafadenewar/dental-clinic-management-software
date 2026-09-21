@@ -413,23 +413,35 @@ const Appointments = ({ searchQuery, createOpen, onCreateOpenChange }: Appointme
                       const endMin = Math.max(startMin + 15, toMinutes(a.endTime))
                       const top = ((startMin - DAY_START) / 60) * HOUR_PX
                       const height = ((endMin - startMin) / 60) * HOUR_PX
+                      const cardHeight = Math.max(36, height)
                       return (
                         <div
                           key={a.id}
                           className={`appt-block ${BLOCK_STATUS[a.status] ?? 'block-blue'}`}
-                          style={{ top: Math.max(0, top), height: Math.max(30, height - 2), left: `${pos.left}%`, width: `${pos.width}%` }}
+                          style={{ top: Math.max(0, top), height: cardHeight, left: `${pos.left}%`, width: `${pos.width}%` }}
                           onClick={(e) => {
                             e.stopPropagation()
                             openEdit(a)
                           }}
                           title={`${a.patientName} · ${toDisplay(a.startTime)} – ${toDisplay(a.endTime)} · ${a.title}`}
                         >
-                          <div className="appt-block-time">
-                            {toDisplay(a.startTime)}
-                            <span className="appt-block-room">{a.room}</span>
-                          </div>
-                          <div className="appt-block-name">{a.patientName}</div>
-                          <div className="appt-block-detail">{a.title}</div>
+                          {cardHeight < 40 ? (
+                            <>
+                              <div className="appt-block-line">
+                                {toDisplay(a.startTime)} · {a.patientName}
+                              </div>
+                              <div className="appt-block-line appt-block-sub">{a.title}</div>
+                            </>
+                          ) : (
+                            <>
+                              <span className="appt-block-room">{a.room}</span>
+                              <div className="appt-block-time">
+                                {toDisplay(a.startTime)}
+                              </div>
+                              <div className="appt-block-name">{a.patientName}</div>
+                              <div className="appt-block-detail">{a.title}</div>
+                            </>
+                          )}
                         </div>
                       )
                     })}

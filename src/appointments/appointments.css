@@ -250,10 +250,10 @@
   position: absolute;
   box-sizing: border-box;
   border-radius: 8px;
-  padding: 6px 8px;
+  padding: 4px 7px;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 1px;
   box-shadow: 0 1px 1px rgba(15, 23, 42, 0.06), 0 3px 8px -6px rgba(15, 23, 42, 0.2);
   border-left-width: 3px;
   border-left-style: solid;
@@ -298,9 +298,27 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 9.5px;
+  font-size: 9px;
   font-weight: 700;
   white-space: nowrap;
+  flex-shrink: 0;
+  line-height: 1.15;
+}
+
+.appt-block-line {
+  font-size: 9px;
+  font-weight: 600;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.15;
+  flex-shrink: 0;
+}
+
+.appt-block-sub {
+  font-weight: 500;
+  color: #475569;
 }
 
 .block-green .appt-block-time { color: #047857; }
@@ -311,34 +329,39 @@
 .block-slate .appt-block-time { color: #475569; }
 
 .appt-block-room {
-  margin-left: auto;
+  position: absolute;
+  top: 4px;
+  right: 5px;
   font-size: 8.5px;
   font-weight: 500;
   color: #64748b;
   background: rgba(255, 255, 255, 0.7);
   border-radius: 4px;
-  padding: 1px 5px;
+  padding: 1px 4px;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 55%;
 }
 
 .appt-block-name {
-  font-size: 11.5px;
+  font-size: 10.5px;
   font-weight: 600;
   color: #0f172a;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1.25;
+  line-height: 1.2;
+  flex-shrink: 0;
 }
 
 .appt-block-detail {
-  font-size: 9.5px;
+  font-size: 8.5px;
   color: #64748b;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1.2;
+  line-height: 1.15;
+  min-height: 0;
 }
 
 .appt-day-loading {

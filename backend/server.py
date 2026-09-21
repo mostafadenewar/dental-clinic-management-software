@@ -20,12 +20,21 @@ from views_appointments import (
     create_appointment, delete_appointment, get_appointment, list_appointments,
     set_appointment_status, update_appointment,
 )
+from views_auth import (
+    authenticate, change_password, login, logout, update_profile,
+)
+from views_backup import (
+    create_backup, delete_backup, list_backups, restore_backup,
+)
 from views_billing import billing_summary, create_invoice, list_invoices, record_payment
 from views_dashboard import dashboard
 from views_inventory import (
     adjust_quantity, create_item, create_order, delete_item, get_item,
     inventory_summary, list_items, list_locations, list_orders, list_transactions,
     update_item,
+)
+from views_notifications import (
+    list_notifications, mark_all_read, mark_read, sync_notifications, unread_count,
 )
 from views_patients import (
     create_patient, delete_patient, get_patient, list_patients, patient_history,
@@ -41,7 +50,7 @@ from views_treatment import (
 CORS = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "Cache-Control": "no-store",
 }
 
@@ -97,13 +106,57 @@ class Handler(BaseHTTPRequestHandler):
 
     # -- routing ------------------------------------------------------------
 
+    def _auth_token(self) -> str:
+        header = (self.headers.get("Authorization") or "").strip()
+        if header.lower().startswith("bearer "):
+            return header[7:].strip()
+        return ""
+
     def _route(self, method: str):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/")
         query = parse_qs(parsed.query)
+        seg = [s for s in path.split("/") if s]
+        public = (
+            seg == ["api", "auth", "login"]
+            or seg == ["api", "health"]
+            or (seg and seg[0] != "api")
+        )
+        restoring = (
+            method == "POST"
+            and len(seg) == 4
+            and seg[:2] == ["api", "backups"]
+            and seg[3] == "restore"
+        )
         body = self._read_body() if method in ("POST", "PUT", "PATCH") else {}
         conn = connect()
         try:
+            if not public:
+                token = self._auth_token() or (query.get("token") or [""])[0]
+                user = authenticate(conn, token)
+                if user is None:
+                    self._send(401, {"error": "authentication required"})
+                    return
+                self.auth_user = user
+            else:
+                self.auth_user = None
+
+            if restoring:
+                # restore_backup flushes and closes `conn` as part of swapping
+                # the database file, so it is handled here rather than in
+                # _dispatch (whose response helpers re-commit on `conn`).
+                try:
+                    payload = restore_backup(conn, seg[2])
+                except ValueError as exc:
+                    self._send(400, {"error": str(exc)})
+                except sqlite3.Error:
+                    self._send(500, {"error": "database error"})
+                except Exception as exc:  # noqa: BLE001
+                    self._send(500, {"error": str(exc)})
+                else:
+                    self._send(200, payload)
+                return
+
             self._dispatch(conn, method, path, query, body)
         except ValueError as exc:
             conn.rollback()
@@ -131,6 +184,57 @@ class Handler(BaseHTTPRequestHandler):
         if seg == ["api", "health"] and method == "GET":
             count = conn.execute("SELECT COUNT(*) AS c FROM patients").fetchone()["c"]
             return ok({"ok": True, "seeded": is_seeded(), "patients": count})
+
+        # /api/auth/*
+        if seg == ["api", "auth", "login"] and method == "POST":
+            return ok(login(conn, body))
+
+        if seg == ["api", "auth", "logout"] and method == "POST":
+            logout(conn, self._auth_token())
+            return ok()
+
+        if seg == ["api", "auth", "me"] and method == "GET":
+            return ok(self.auth_user)
+
+        if seg == ["api", "auth", "profile"] and method in ("PATCH", "PUT"):
+            u = update_profile(conn, self.auth_user["id"], body)
+            return ok(u) if u else self._send(404, {"error": "not found"})
+
+        if seg == ["api", "auth", "password"] and method == "POST":
+            change_password(conn, self.auth_user["id"], body)
+            return ok()
+
+        # /api/notifications
+        if seg == ["api", "notifications"] and method == "GET":
+            sync_notifications(conn)
+            return ok({"notifications": list_notifications(conn), "unread": unread_count(conn)})
+
+        if seg == ["api", "notifications", "unread"] and method == "GET":
+            sync_notifications(conn)
+            return ok({"count": unread_count(conn)})
+
+        if len(seg) == 4 and seg[0] == "api" and seg[1] == "notifications" and seg[3] == "read":
+            if method == "POST":
+                mark_read(conn, seg[2])
+                return ok({"unread": unread_count(conn)})
+
+        if seg == ["api", "notifications", "read-all"] and method == "POST":
+            mark_all_read(conn)
+            return ok()
+
+        # /api/backups
+        if seg == ["api", "backups"] and method == "GET":
+            return ok(list_backups(conn))
+
+        if seg == ["api", "backups"] and method == "POST":
+            return ok(create_backup(conn), 201)
+
+        if len(seg) == 4 and seg[0] == "api" and seg[1] == "backups" and seg[3] == "restore":
+            pass  # handled in _route (closes the connection during swap)
+
+        if len(seg) == 3 and seg[0] == "api" and seg[1] == "backups":
+            if method == "DELETE":
+                return ok(delete_backup(conn, seg[2]))
 
         if seg == ["api", "dashboard"] and method == "GET":
             return ok(dashboard(conn))
