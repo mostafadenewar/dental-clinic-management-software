@@ -1,3 +1,8 @@
+/* ========================================================================= */
+/* Settings Page Styles                                                     */
+/* ========================================================================= */
+/* System info, backup table, and settings grid                             */
+
 .settings-page {
   padding: 18px;
   display: flex;

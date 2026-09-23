@@ -1,7 +1,14 @@
+/* ========================================================================= */
+/* App Layout Styles                                                        */
+/* ========================================================================= */
+/* Global CSS Reset & Base Styles — foundation for the entire app */
+/* Root layout wrapper — centers the app on page with zero margins */
+
 #root {
   margin: 0 auto;
 }
 
+/* App layout wrapper — full-screen flex container with fixed top height */
 .app-layout {
   display: flex;
   height: calc(100vh - 30px);
@@ -10,6 +17,7 @@
   background-color: #fcfdfe;
 }
 
+/* Main app content area — takes remaining space in a column layout */
 .app-main {
   flex: 1;
   min-width: 0;
@@ -18,6 +26,7 @@
   background-color: #fcfdfe;
 }
 
+/* Scrollable content area within main body */
 .app-content {
   flex: 1;
   min-height: 0;
@@ -26,6 +35,7 @@
   contain: layout;
 }
 
+/* Splash screen — shown during app initialization before full load */
 .app-splash {
   height: calc(100vh - 30px);
   display: flex;
@@ -36,6 +46,7 @@
   font-size: 12px;
 }
 
+/* Animated pulsing dot for splash screen */
 .app-splash-dot {
   width: 8px;
   height: 8px;
@@ -44,6 +55,7 @@
   animation: splash-pulse 1.1s ease-in-out infinite;
 }
 
+/* Pulsing animation keyframes for splash screen dot */
 @keyframes splash-pulse {
   0%,
   100% {

@@ -1,4 +1,12 @@
+/* ========================================================================= */
+/* Header Bar Styles                                                        */
+/* ========================================================================= */
+/* App title, search, segment selector, and profile menu                    */
+
+/* --- Header bar styles ---------------------------------------------------- */
+
 .header {
+  /* Fixed-height header spanning full width, with left padding for sidebar */
   height: 39px;
   flex-shrink: 0;
   display: flex;
@@ -10,13 +18,15 @@
   padding-left: 18px;
 }
 
+/* Left section of header — holds app title and search */
 .header-left {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-width: 0;
+  min-width: 0; /* Allows text overflow without breaking layout */
 }
 
+/* App name styling */
 .header h1 {
   margin: 0;
   font-size: 12px;
@@ -25,16 +35,19 @@
   letter-spacing: -0.01em;
 }
 
+/* Dashboard-specific title override */
 .header-dashboard h1 {
   font-size: 17px;
 }
 
 .header-dashboard h3 {
+  /* Subtitle below dashboard name */
   font-size: 13px;
   color: #64748b;
   font-weight: 500;
 }
 
+/* Generic section label (e.g., "My Clinic") */
 .header h3 {
   margin: 0;
   font-size: 9px;
@@ -42,12 +55,14 @@
   color: #94a3b8;
 }
 
+/* Actions section — search + buttons + icons */
 .header-actions {
   display: flex;
   align-items: center;
   gap: 12px;
 }
 
+/* Search input in header */
 .header-search {
   display: flex;
   align-items: center;
@@ -69,10 +84,12 @@
   width: 100%;
 }
 
+/* Search placeholder text */
 .header-search input::placeholder {
   color: #9ca3af;
 }
 
+/* Segment selector (e.g., Today / Week) */
 .header-segment {
   display: flex;
   align-items: center;
@@ -82,7 +99,9 @@
   height: 26px;
 }
 
+/* Individual segment option button */
 .segment-option {
+  /* Default state */
   border: none;
   background: transparent;
   font-size: 10.5px;
@@ -91,6 +110,8 @@
   height: 22px;
   border-radius: 6px;
   cursor: pointer;
+
+  /* Active state */
 }
 
 .segment-option.active {
@@ -99,6 +120,7 @@
   font-weight: 500;
 }
 
+/* Primary call-to-action button in header */
 .header-primary-btn {
   display: flex;
   align-items: center;
@@ -119,6 +141,7 @@
   background-color: #1d4ed8;
 }
 
+/* Bell icon with notification count */
 .header-bell {
   position: relative;
   background: transparent;
@@ -130,11 +153,13 @@
   padding: 2px;
 }
 
+/* Bell hover and active (unread) states */
 .header-bell:hover,
 .header-bell.bell-active {
   color: #2563eb;
 }
 
+/* Unread notification counter badge */
 .header-bell-count {
   position: absolute;
   top: -3px;
@@ -142,7 +167,7 @@
   min-width: 14px;
   height: 14px;
   padding: 0 3px;
-  border-radius: 999px;
+  border-radius: 999px; /* Pill shape */
   background-color: #ef4444;
   color: #ffffff;
   font-size: 8px;
@@ -152,27 +177,33 @@
   justify-content: center;
 }
 
+/* Profile dropdown container — positioned relative */
 .header-bell-wrap,
 .header-profile-wrap {
   position: relative;
 }
 
+/* Full-screen backdrop when profile menu is open */
 .header-menu-backdrop {
   position: fixed;
-  inset: 0;
+  inset: 0; /* top, right, bottom, left = 0 */
   z-index: 940;
 }
 
+/* Backdrop must be visible for both bell and profile menus */
 .header-bell-wrap .header-menu-backdrop,
 .header-profile-wrap .header-menu-backdrop {
   z-index: 940;
 }
 
+/* Divider line between sections */
 .header-divider {
   width: 1px;
   height: 20px;
   background-color: #e2e8f0;
 }
+
+/* --- Profile menu styles -------------------------------------------------- */
 
 .header-profile {
   display: flex;
@@ -185,6 +216,7 @@
   border-radius: 8px;
 }
 
+/* Active profile indicator ring */
 .header-profile.profile-active .header-avatar {
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25);
 }
@@ -203,6 +235,7 @@
 }
 
 .header-profile-text {
+  /* Name and role stacked vertically */
   display: flex;
   flex-direction: column;
   line-height: 1.35;
@@ -216,14 +249,16 @@
 }
 
 .header-role {
+  /* Role badge below name */
   font-size: 8.5px;
   color: #94a3b8;
 }
 
+/* Dropdown menu positioned absolutely from the right edge */
 .profile-menu {
   position: absolute;
   right: 0;
-  top: 36px;
+  top: 36px; /* just below header bottom (39px) - accounts for border */
   z-index: 950;
   width: 208px;
   background: #ffffff;
@@ -231,18 +266,14 @@
   border-radius: 12px;
   box-shadow: 0 18px 40px -16px rgba(15, 23, 42, 0.32);
   padding: 6px;
+  /* Slide-in animation */
   animation: menu-in 0.14s ease-out;
 }
 
+/* Menu open keyframe animation */
 @keyframes menu-in {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .profile-menu-head {
@@ -262,10 +293,12 @@
 }
 
 .profile-menu-head span:not(.header-avatar) {
+  /* User name in head (not avatar itself) */
   font-size: 9.5px;
   color: #94a3b8;
 }
 
+/* Menu items — clickable rows */
 .profile-menu-item {
   display: flex;
   align-items: center;
@@ -281,11 +314,13 @@
   text-align: left;
 }
 
+/* Hover state for items */
 .profile-menu-item:hover {
   background-color: #f1f5f9;
   color: #1e293b;
 }
 
+/* Danger section (log out button) */
 .profile-menu-item.danger {
   color: #dc2626;
 }
@@ -295,6 +330,7 @@
 }
 
 .profile-menu-sep {
+  /* Separator line between menu sections */
   height: 1px;
   background-color: #eef2f7;
   margin: 5px 4px;

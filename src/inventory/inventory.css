@@ -1,3 +1,8 @@
+/* ========================================================================= */
+/* Inventory Management Page Styles                                         */
+/* ========================================================================= */
+/* KPI cards, storage locations, stock grid, and purchase orders            */
+
 .iv-page {
   padding: 14px 16px 30px 16px;
   display: flex;

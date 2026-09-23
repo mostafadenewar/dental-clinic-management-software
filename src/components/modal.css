@@ -1,3 +1,8 @@
+/* ========================================================================= */
+/* UI Modal Component Styles                                                */
+/* ========================================================================= */
+/* Modal overlay, container, and shared UI elements                          */
+
 .ui-modal-overlay {
   position: fixed;
   inset: 0;

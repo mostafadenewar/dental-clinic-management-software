@@ -9,11 +9,13 @@ from db import today
 
 
 def initials(name: str) -> str:
+    # Derive a 1-2 character uppercase initials from a patient's name.
     parts = [p for p in name.split() if p]
     return "".join(p[0].upper() for p in parts[:2]) or "?"
 
 
 def age_from_dob(dob: str | None) -> int | None:
+    # Compute age in whole years from an ISO date string (or None).
     if not dob:
         return None
     try:
@@ -25,11 +27,13 @@ def age_from_dob(dob: str | None) -> int | None:
 
 
 def gender_age(gender: str, dob: str | None) -> str:
+    # Format a gender/age label, omitting age when it cannot be computed.
     a = age_from_dob(dob)
     return f"{gender}, {a}" if a is not None else gender
 
 
 def patient_summary(conn: sqlite3.Connection, patient_id: str) -> dict:
+    # Build a serializable summary dict for a patient (empty if not found).
     row = conn.execute("SELECT * FROM patients WHERE id = ?", (patient_id,)).fetchone()
     if row is None:
         return {}
@@ -45,6 +49,7 @@ def patient_summary(conn: sqlite3.Connection, patient_id: str) -> dict:
 
 
 def time_ago(at: str) -> str:
+    # Render a human-readable relative-time string for an ISO timestamp.
     if not at:
         return ""
     try:
@@ -66,6 +71,7 @@ def time_ago(at: str) -> str:
 
 
 def invoice_totals(conn: sqlite3.Connection, invoice_id: str) -> dict:
+    # Aggregate line items, payments, and status for a single invoice.
     total = conn.execute(
         "SELECT COALESCE(SUM(amount), 0) AS t FROM invoice_line_items WHERE invoice_id = ?",
         (invoice_id,),
@@ -83,6 +89,7 @@ def invoice_totals(conn: sqlite3.Connection, invoice_id: str) -> dict:
 
 
 def compute_status(total: float, paid: float, balance: float, due_date: str) -> str:
+    # Classify an invoice as paid, overdue, unpaid, or partial.
     today_iso = today().isoformat()
     if balance <= 0.001:
         return "paid"
@@ -94,6 +101,7 @@ def compute_status(total: float, paid: float, balance: float, due_date: str) -> 
 
 
 def patient_outstanding(conn: sqlite3.Connection, patient_id: str) -> tuple[float, bool]:
+    # Sum outstanding balances across a patient's invoices and flag any overdue.
     rows = conn.execute(
         "SELECT id FROM invoices WHERE patient_id = ?", (patient_id,)
     ).fetchall()
